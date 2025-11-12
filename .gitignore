@@ -1,0 +1,12 @@
+node_modules
+.turbo
+.next
+.env
+.env.local
+.env.*.local
+pnpm-lock.yaml
+apps/web/.next
+apps/*/node_modules
+apps/edge/dist
+dist
+coverage

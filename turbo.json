@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [
+        "apps/web/.next/**",
+        "apps/edge/dist/**"
+      ]
+    },
+    "dev": {
+      "cache": false
+    },
+    "lint": {}
+  }
+}
