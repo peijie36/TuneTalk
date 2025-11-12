@@ -1,11 +1,11 @@
-import Link from 'next/link'
+import Link from "next/link";
 
 const features = [
-  'Supabase-authenticated lobbies with invite links and presence',
-  'Realtime chat + member list powered by Supabase Realtime channels',
-  'Shared playback timeline broadcasted from the Hono service',
-  'Optional skip voting backed by database-side tallies'
-]
+  "Supabase-authenticated lobbies with invite links and presence",
+  "Realtime chat + member list powered by Supabase Realtime channels",
+  "Shared playback timeline broadcasted from the Hono service",
+  "Optional skip voting backed by database-side tallies"
+];
 
 export default function HomePage() {
   return (
@@ -46,5 +46,5 @@ export default function HomePage() {
         ))}
       </section>
     </main>
-  )
+  );
 }
