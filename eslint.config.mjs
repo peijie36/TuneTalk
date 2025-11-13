@@ -1,52 +1,55 @@
 // eslint.config.mjs
 // @ts-check
 
+import { defineConfig } from "eslint/config";
 import js from "@eslint/js";
+import ts from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
-import tseslint from "typescript-eslint";
+import eslintNextPlugin from "@next/eslint-plugin-next";
+import globals from "globals";
 
-export default tseslint.config(
+export default defineConfig([
 	// 1) Global ignores
 	{
-		ignores: [
-			"**/node_modules/**",
-			"**/dist/**",
-			"**/.next/**",
-			"apps/*/dist/**",
-			"**/.turbo/**",
-			"**/coverage/**",
-		],
-		linterOptions: {
-			reportUnusedDisableDirectives: true,
-		},
+		ignores: ["**/.next/**", "**/node_modules/**", "**/dist/**", "**/.turbo/**"],
 	},
 
-	// 2) Base JS rules (they also apply to TS via the TS parser)
+	// 2) Base JS recommended rules
 	js.configs.recommended,
 
-	// 3) TypeScript (type-checked) + style + React
+	// 3) TypeScript + React + Next configuration
 	{
 		files: ["**/*.{ts,tsx}"],
-		extends: [
-			...tseslint.configs.recommendedTypeChecked,
-			...tseslint.configs.stylisticTypeChecked,
-		],
+
 		languageOptions: {
+			parser: ts.parser,
 			parserOptions: {
 				projectService: true,
+				// @ts-expect-error - ESM limitation in ESLint
 				tsconfigRootDir: import.meta.dirname,
 			},
+			globals: {
+				...globals.browser, // window, document, fetch, etc.
+				...globals.node, // process, __dirname, etc.
+				JSX: true, // JSX namespace for TSX
+				React: true, // global React namespace (optional)
+			},
 		},
+
 		plugins: {
-			react: reactPlugin,
+			"react": reactPlugin,
+			"next": eslintNextPlugin,
+			"@typescript-eslint": ts.plugin,
 		},
+
 		settings: {
 			react: {
 				version: "detect",
 			},
 		},
+
 		rules: {
-			// your style + correctness rules
+			// Style rules
 			"quotes": ["error", "double", { avoidEscape: true }],
 			"semi": ["error", "always"],
 			"eqeqeq": ["error", "always"],
@@ -56,13 +59,34 @@ export default tseslint.config(
 			"no-tabs": "error",
 			"prefer-const": "warn",
 
-			// TS-specific
+			// Console & undefined handling
+			"no-console": "off", // allow console
+			"no-undef": "error", // still catch actual undefined variables
+
+			// TypeScript rules
 			"@typescript-eslint/no-unused-vars": [
 				"warn",
 				{
 					argsIgnorePattern: "^_",
 					varsIgnorePattern: "^_",
+					caughtErrorsIgnorePattern: "^_",
 					ignoreRestSiblings: true,
+				},
+			],
+
+			"@typescript-eslint/consistent-type-imports": [
+				"warn",
+				{
+					fixStyle: "inline-type-imports",
+					prefer: "type-imports",
+				},
+			],
+
+			"@typescript-eslint/naming-convention": [
+				"warn",
+				{
+					format: ["PascalCase"],
+					selector: "typeLike",
 				},
 			],
 
@@ -70,12 +94,4 @@ export default tseslint.config(
 			"react/react-in-jsx-scope": "off",
 		},
 	},
-
-	// 4) Edge + shared: slightly relaxed `any`
-	{
-		files: ["apps/edge/**/*.ts", "packages/shared/**/*.ts"],
-		rules: {
-			"@typescript-eslint/no-explicit-any": "warn",
-		},
-	}
-);
+]);
