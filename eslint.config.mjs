@@ -3,43 +3,61 @@
 
 import { defineConfig } from "eslint/config";
 import js from "@eslint/js";
-import ts from "typescript-eslint";
+import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
-import eslintNextPlugin from "@next/eslint-plugin-next";
+import nextPlugin from "@next/eslint-plugin-next";
 import globals from "globals";
 
 export default defineConfig([
 	// 1) Global ignores
 	{
-		ignores: ["**/.next/**", "**/node_modules/**", "**/dist/**", "**/.turbo/**"],
+		ignores: [
+			"**/.next/**",
+			"**/node_modules/**",
+			"**/dist/**",
+			"**/.turbo/**",
+			"**/coverage/**",
+
+			// Ignore all config/build files
+			"**/next.config.*",
+			"**/postcss.config.*",
+			"**/tailwind.config.*",
+			"**/eslint.config.*",
+			"**/tsconfig.*",
+			"**/*.config.*",
+		],
 	},
 
-	// 2) Base JS recommended rules
+	// 2) Core JS recommended
 	js.configs.recommended,
 
-	// 3) TypeScript + React + Next configuration
+	// 3) TypeScript recommended configs (type-aware + stylistic)
+	...tseslint.configs.recommendedTypeChecked,
+	...tseslint.configs.stylisticTypeChecked,
+
+	// 4) React + TS Rules
 	{
 		files: ["**/*.{ts,tsx}"],
 
 		languageOptions: {
-			parser: ts.parser,
+			parser: tseslint.parser,
 			parserOptions: {
 				projectService: true,
-				// @ts-expect-error - ESM limitation in ESLint
+				// @ts-expect-error ESM limitation
 				tsconfigRootDir: import.meta.dirname,
 			},
 			globals: {
-				...globals.browser, // window, document, fetch, etc.
-				...globals.node, // process, __dirname, etc.
-				JSX: true, // JSX namespace for TSX
-				React: true, // global React namespace (optional)
+				...globals.browser,
+				...globals.node,
+				JSX: true,
+				React: true,
 			},
 		},
 
 		plugins: {
-			"react": reactPlugin,
-			"next": eslintNextPlugin,
-			"@typescript-eslint": ts.plugin,
+			reactPlugin,
+			"next": nextPlugin,
+			"@typescript-eslint": tseslint.plugin,
 		},
 
 		settings: {
@@ -49,7 +67,7 @@ export default defineConfig([
 		},
 
 		rules: {
-			// Style rules
+			/** Style */
 			"quotes": ["error", "double", { avoidEscape: true }],
 			"semi": ["error", "always"],
 			"eqeqeq": ["error", "always"],
@@ -59,10 +77,19 @@ export default defineConfig([
 			"no-tabs": "error",
 			"prefer-const": "warn",
 
-			// Console & undefined handling
-			"no-console": "off", // allow console
+			/** TS */
+			"no-unused-vars": "off", // disabled in favor of TS version
 
-			// TypeScript rules
+			"@typescript-eslint/no-unused-vars": [
+				"warn",
+				{
+					argsIgnorePattern: "^_",
+					varsIgnorePattern: "^_",
+					caughtErrorsIgnorePattern: "^_",
+					ignoreRestSiblings: true,
+				},
+			],
+
 			"@typescript-eslint/consistent-type-imports": [
 				"warn",
 				{
@@ -74,13 +101,16 @@ export default defineConfig([
 			"@typescript-eslint/naming-convention": [
 				"warn",
 				{
-					format: ["PascalCase"],
 					selector: "typeLike",
+					format: ["PascalCase"],
 				},
 			],
 
-			// React
+			/** React */
 			"react/react-in-jsx-scope": "off",
+
+			/** Console */
+			"no-console": "off",
 		},
 	},
 ]);
