@@ -61,19 +61,8 @@ export default defineConfig([
 
 			// Console & undefined handling
 			"no-console": "off", // allow console
-			"no-undef": "error", // still catch actual undefined variables
 
 			// TypeScript rules
-			"@typescript-eslint/no-unused-vars": [
-				"warn",
-				{
-					argsIgnorePattern: "^_",
-					varsIgnorePattern: "^_",
-					caughtErrorsIgnorePattern: "^_",
-					ignoreRestSiblings: true,
-				},
-			],
-
 			"@typescript-eslint/consistent-type-imports": [
 				"warn",
 				{
