@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx"
+    "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",

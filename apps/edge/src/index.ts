@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { PlaybackState } from "@tunetalk/shared";
 
 const app = new Hono();
-const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
+const nodeWebSocket = createNodeWebSocket({ app });
 
 const playbackSchema = z.object({
   trackId: z.string().min(1),
@@ -19,7 +19,7 @@ type PlaybackPayload = z.infer<typeof playbackSchema>;
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.post("/lobbies/:id/playback", async (c) => {
-  const json = await c.req.json().catch(() => null);
+  const json: unknown = await c.req.json().catch(() => null);
   const parsed = playbackSchema.safeParse(json);
 
   if (!parsed.success) {
@@ -43,23 +43,23 @@ app.post("/lobbies/:id/playback", async (c) => {
 
 app.get(
   "/lobbies/:id/socket",
-  upgradeWebSocket((c) => {
+  nodeWebSocket.upgradeWebSocket((c) => {
     const lobbyId = c.req.param("id");
     return {
-      onMessage(event, ws) {
+      onMessage: (event, ws) => {
         // TODO: Authenticate callers and fan-out events via Supabase or Redis
         console.info(`[lobby:${lobbyId}] message`, event.data);
         ws.send(event.data);
       },
-      onClose() {
+      onClose: () => {
         console.info(`[lobby:${lobbyId}] connection closed`);
       }
     };
   })
 );
 
-const port = Number(process.env.PORT || 8787);
+const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });
-injectWebSocket(server);
+nodeWebSocket.injectWebSocket(server);
 
 console.log(`Hono control plane listening on http://localhost:${port}`);
