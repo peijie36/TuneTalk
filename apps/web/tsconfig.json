@@ -4,7 +4,7 @@
     "jsx": "preserve",
     "noEmit": true,
     "moduleResolution": "Bundler",
-    "allowJs": false,
+    "allowJs": true,
     "types": ["node", "react", "react-dom"],
     "incremental": true,
     "baseUrl": ".",
@@ -17,5 +17,5 @@
     "**/*.ts",
     "**/*.tsx"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist", ".next", ".turbo"]
 }
