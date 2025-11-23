@@ -1,8 +1,8 @@
-import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
-import { z } from "zod";
 import type { PlaybackState } from "@tunetalk/shared";
+import { Hono } from "hono";
+import { z } from "zod";
 
 const app = new Hono();
 const nodeWebSocket = createNodeWebSocket({ app });
@@ -11,7 +11,7 @@ const playbackSchema = z.object({
   trackId: z.string().min(1),
   positionMs: z.number().int().nonnegative().default(0),
   isPaused: z.boolean().default(false),
-  updatedAt: z.string().datetime().optional()
+  updatedAt: z.string().datetime().optional(),
 });
 
 type PlaybackPayload = z.infer<typeof playbackSchema>;
@@ -34,7 +34,9 @@ app.post("/lobbies/:id/playback", async (c) => {
     trackId: payload.trackId,
     positionMs: payload.positionMs,
     isPaused: payload.isPaused,
-    updatedAt: payload.updatedAt ? new Date(payload.updatedAt).toISOString() : new Date().toISOString()
+    updatedAt: payload.updatedAt
+      ? new Date(payload.updatedAt).toISOString()
+      : new Date().toISOString(),
   };
 
   // TODO: Persist state in Supabase + broadcast to listeners
@@ -53,7 +55,7 @@ app.get(
       },
       onClose: () => {
         console.info(`[lobby:${lobbyId}] connection closed`);
-      }
+      },
     };
   })
 );

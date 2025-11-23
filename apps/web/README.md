@@ -3,6 +3,7 @@
 Front-end client for TuneTalk built on the App Router, Tailwind CSS v4, and Supabase helpers.
 
 ## Scripts
+
 - `pnpm dev:web`
 - `pnpm --filter @tunetalk/web build`
 - `pnpm --filter @tunetalk/web lint`

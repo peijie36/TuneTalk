@@ -3,6 +3,7 @@
 Playback control plane exposing REST endpoints for lobby lifecycle + playback changes and a WebSocket channel for realtime fan-out.
 
 ## Scripts
+
 - `pnpm dev:edge`
 - `pnpm --filter @tunetalk/edge build`
 
