@@ -4,42 +4,177 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
+/* Map Tailwind tokens to runtime CSS variables */
+@theme inline {
+  /* Surfaces */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-card-alt: var(--card-alt);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-hero-left: var(--hero-left);
+  --color-hero-right: var(--hero-right);
+
   /* Brand colors */
-  --color-primary: #a03df0;
-  --color-primary-hover: #8c2fd6;
-  --color-primary-muted: #d6b6ff;
-  --color-hero-left: #b9b8ff;
-  --color-hero-right: #f9cee0;
-  --color-surface: #f2eef7;
-  --color-card: #f8c6d8;
-  --color-card-alt: #ffe6f0;
-  --color-accent-warm: #ff7b72;
-  --color-accent-gold: #ffc857;
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-muted: var(--primary-muted);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent-warm: var(--accent-warm);
+  --color-accent-gold: var(--accent-gold);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
 
   /* Text and lines */
-  --color-text: #4b3f4e;
-  --color-text-strong: #312838;
-  --color-text-muted: #8c8294;
-  --color-border: #e7e2ed;
-
-  /* Surfaces and shadows */
-  --color-background: #f7f4fb;
-  --shadow-hero: 0 14px 36px rgba(160, 61, 240, 0.18);
-  --shadow-card: 0 10px 26px rgba(0, 0, 0, 0.08);
+  --color-text: var(--text);
+  --color-text-strong: var(--text-strong);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-input: var(--input);
 
   /* Radii */
-  --radius-pill: 999px;
-  --radius-card: 20px;
-  --radius-input: 12px;
+  --radius: var(--radius-base);
+  --radius-pill: var(--radius-pill-base);
+  --radius-card: var(--radius-card-base);
+  --radius-input: var(--radius-input-base);
 
   /* Fonts */
-  --font-sans:
+  --font-sans: var(--font-sans-family);
+
+  /* Spacing tokens */
+  --space-section: var(--space-section-size);
+  --space-card: var(--space-card-size);
+
+  /* Shadows */
+  --shadow-hero: var(--shadow-hero-depth);
+  --shadow-card: var(--shadow-card-depth);
+}
+
+/* Runtime light theme */
+:root {
+  /* Surfaces */
+  --background: #f7f4fb;
+  --foreground: #4b3f4e;
+  --surface: #f2eef7;
+  --card: #f8c6d8;
+  --card-alt: #ffe6f0;
+  --card-foreground: #312838;
+  --popover: #ffffff;
+  --popover-foreground: #312838;
+  --secondary: #f2eef7;
+  --secondary-foreground: #312838;
+  --muted: #f2eef7;
+  --muted-foreground: #8c8294;
+  --accent: #f8c6d8;
+  --accent-foreground: #312838;
+  --hero-left: #b9b8ff;
+  --hero-right: #f9cee0;
+
+  /* Brand colors */
+  --primary: #a03df0;
+  --primary-hover: #8c2fd6;
+  --primary-muted: #d6b6ff;
+  --primary-foreground: #ffffff;
+  --accent-warm: #ff7b72;
+  --accent-gold: #ffc857;
+  --destructive: #ff7b72;
+  --destructive-foreground: #2f0c0b;
+  --ring: #d6b6ff;
+
+  /* Text and lines */
+  --text: #4b3f4e;
+  --text-strong: #312838;
+  --text-muted: #8c8294;
+  --border: #e7e2ed;
+  --input: #e7e2ed;
+
+  /* Radii */
+  --radius-base: 0.625rem;
+  --radius-pill-base: 999px;
+  --radius-card-base: 20px;
+  --radius-input-base: 12px;
+
+  /* Fonts */
+  --font-sans-family:
     "Poppins", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Spacing tokens */
-  --space-section: 80px;
-  --space-card: 24px;
+  --space-section-size: 80px;
+  --space-card-size: 24px;
+
+  /* Shadows */
+  --shadow-hero-depth: 0 14px 36px
+    color-mix(in srgb, var(--primary) 18%, transparent);
+  --shadow-card-depth: 0 10px 26px
+    color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+/* Runtime dark theme */
+.dark {
+  /* Surfaces */
+  --background: #0f0c14;
+  --foreground: #f5f1ff;
+  --surface: #1c1a2c;
+  --card: #191828;
+  --card-alt: #1f1d2f;
+  --card-foreground: #f5f1ff;
+  --popover: #161421;
+  --popover-foreground: #f5f1ff;
+  --secondary: #1f1d2f;
+  --secondary-foreground: #f5f1ff;
+  --muted: #1d1b2a;
+  --muted-foreground: #a8a1ba;
+  --accent: #231f33;
+  --accent-foreground: #f5f1ff;
+  --hero-left: #2b2440;
+  --hero-right: #1c1a2c;
+
+  /* Brand colors */
+  --primary: #c8a5ff;
+  --primary-hover: #b789ff;
+  --primary-muted: #9d80e7;
+  --primary-foreground: #0f0c14;
+  --accent-warm: #ff928a;
+  --accent-gold: #e8c36a;
+  --destructive: #ff928a;
+  --destructive-foreground: #1a0c0c;
+  --ring: #c8a5ff;
+
+  /* Text and lines */
+  --text: #d7d1e5;
+  --text-strong: #ffffff;
+  --text-muted: #a8a1ba;
+  --border: #2d2a3f;
+  --input: #2d2a3f;
+
+  /* Radii */
+  --radius-base: 0.625rem;
+  --radius-pill-base: 999px;
+  --radius-card-base: 20px;
+  --radius-input-base: 12px;
+
+  /* Fonts */
+  --font-sans-family:
+    "Poppins", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Spacing tokens */
+  --space-section-size: 80px;
+  --space-card-size: 24px;
+
+  /* Shadows */
+  --shadow-hero-depth: 0 14px 36px
+    color-mix(in srgb, var(--primary) 22%, transparent);
+  --shadow-card-depth: 0 10px 26px color-mix(in srgb, #000 30%, transparent);
 }
 
 @layer base {
@@ -53,7 +188,6 @@
   }
 
   body {
-    @apply bg-background;
     margin: 0;
     min-height: 100vh;
     font-family: var(--font-sans);
@@ -62,7 +196,7 @@
       var(--color-hero-left),
       var(--color-hero-right)
     );
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 
   a {
@@ -99,7 +233,6 @@
 }
 
 @layer components {
-  /* Surfaces */
   .tt-hero-surface {
     background: linear-gradient(
       120deg,
@@ -127,10 +260,10 @@
 
   .tt-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 14px 32px
+      color-mix(in srgb, var(--color-foreground) 18%, transparent);
   }
 
-  /* Buttons */
   .tt-btn-primary {
     display: inline-flex;
     align-items: center;
@@ -139,10 +272,11 @@
     padding: 0.85rem 1.4rem;
     border-radius: var(--radius-pill);
     background: var(--color-primary);
-    color: #fff;
+    color: var(--color-primary-foreground);
     font-weight: 600;
     border: none;
-    box-shadow: 0 10px 24px rgba(160, 61, 240, 0.25);
+    box-shadow: 0 10px 24px
+      color-mix(in srgb, var(--color-primary) 25%, transparent);
     transition:
       background-color 150ms ease,
       transform 150ms ease,
@@ -152,7 +286,8 @@
   .tt-btn-primary:hover {
     background: var(--color-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(140, 47, 214, 0.28);
+    box-shadow: 0 12px 30px
+      color-mix(in srgb, var(--color-primary-hover) 28%, transparent);
   }
 
   .tt-btn-primary:focus-visible {
@@ -179,13 +314,12 @@
     background: var(--color-surface);
   }
 
-  /* Inputs */
   .tt-input {
     width: 100%;
     border-radius: var(--radius-input);
     border: 1px solid var(--color-border);
     padding: 0.75rem 0.9rem;
-    background: #fff;
+    background: var(--color-popover);
     color: var(--color-text);
     transition:
       border-color 150ms ease,
@@ -194,18 +328,18 @@
 
   .tt-input:focus {
     border-color: var(--color-primary-muted);
-    box-shadow: 0 0 0 3px rgba(214, 182, 255, 0.6);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-primary-muted) 60%, transparent);
     outline: none;
   }
 
-  /* Badges / pills */
   .tt-pill {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
     padding: 0.35rem 0.8rem;
     border-radius: var(--radius-pill);
-    background: rgba(160, 61, 240, 0.12);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
     color: var(--color-primary-hover);
     font-weight: 600;
   }
@@ -228,44 +362,4 @@
   .tt-section {
     padding-block: clamp(48px, 10vw, var(--space-section));
   }
-}
-
-:root {
-  --radius: 0.625rem;
-  --background: var(--color-background);
-  --foreground: var(--color-text);
-  --card: var(--color-card);
-  --card-foreground: var(--color-text);
-  --popover: #ffffff;
-  --popover-foreground: var(--color-text-strong);
-  --primary: var(--color-primary);
-  --primary-foreground: #ffffff;
-  --secondary: var(--color-surface);
-  --secondary-foreground: var(--color-text-strong);
-  --muted: var(--color-surface);
-  --muted-foreground: var(--color-text-muted);
-  --accent: var(--color-card);
-  --accent-foreground: var(--color-text-strong);
-  --destructive: var(--color-accent-warm);
-  --border: var(--color-border);
-  --input: var(--color-border);
-  --ring: var(--color-primary-muted);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
 }
