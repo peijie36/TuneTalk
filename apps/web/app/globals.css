@@ -1,5 +1,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme {
   /* Brand colors */
@@ -41,6 +44,7 @@
 
 @layer base {
   * {
+    @apply border-border;
     box-sizing: border-box;
   }
 
@@ -49,6 +53,7 @@
   }
 
   body {
+    @apply bg-background;
     margin: 0;
     min-height: 100vh;
     font-family: var(--font-sans);
@@ -223,4 +228,44 @@
   .tt-section {
     padding-block: clamp(48px, 10vw, var(--space-section));
   }
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: var(--color-background);
+  --foreground: var(--color-text);
+  --card: var(--color-card);
+  --card-foreground: var(--color-text);
+  --popover: #ffffff;
+  --popover-foreground: var(--color-text-strong);
+  --primary: var(--color-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-surface);
+  --secondary-foreground: var(--color-text-strong);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-text-muted);
+  --accent: var(--color-card);
+  --accent-foreground: var(--color-text-strong);
+  --destructive: var(--color-accent-warm);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-primary-muted);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
 }

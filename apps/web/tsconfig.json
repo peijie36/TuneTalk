@@ -3,7 +3,6 @@
   "compilerOptions": {
     "jsx": "preserve",
     "noEmit": true,
-    "moduleResolution": "Bundler",
     "allowJs": true,
     "types": ["node", "react", "react-dom"],
     "incremental": true,
