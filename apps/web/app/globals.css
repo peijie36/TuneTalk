@@ -62,7 +62,6 @@
 
 /* Runtime light theme */
 :root {
-  /* Surfaces */
   --background: #f7f4fb;
   --foreground: #4b3f4e;
   --surface: #f2eef7;
@@ -80,7 +79,6 @@
   --hero-left: #b9b8ff;
   --hero-right: #f9cee0;
 
-  /* Brand colors */
   --primary: #a03df0;
   --primary-hover: #8c2fd6;
   --primary-muted: #d6b6ff;
@@ -91,28 +89,23 @@
   --destructive-foreground: #2f0c0b;
   --ring: #d6b6ff;
 
-  /* Text and lines */
   --text: #4b3f4e;
   --text-strong: #312838;
   --text-muted: #8c8294;
   --border: #e7e2ed;
   --input: #e7e2ed;
 
-  /* Radii */
   --radius-base: 0.625rem;
   --radius-pill-base: 999px;
   --radius-card-base: 20px;
   --radius-input-base: 12px;
 
-  /* Fonts */
   --font-sans-family:
     "Poppins", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Spacing tokens */
   --space-section-size: 80px;
   --space-card-size: 24px;
 
-  /* Shadows */
   --shadow-hero-depth: 0 14px 36px
     color-mix(in srgb, var(--primary) 18%, transparent);
   --shadow-card-depth: 0 10px 26px
@@ -121,7 +114,6 @@
 
 /* Runtime dark theme */
 .dark {
-  /* Surfaces */
   --background: #0f0c14;
   --foreground: #f5f1ff;
   --surface: #1c1a2c;
@@ -139,7 +131,6 @@
   --hero-left: #2b2440;
   --hero-right: #1c1a2c;
 
-  /* Brand colors */
   --primary: #c8a5ff;
   --primary-hover: #b789ff;
   --primary-muted: #9d80e7;
@@ -150,28 +141,23 @@
   --destructive-foreground: #1a0c0c;
   --ring: #c8a5ff;
 
-  /* Text and lines */
   --text: #d7d1e5;
   --text-strong: #ffffff;
   --text-muted: #a8a1ba;
   --border: #2d2a3f;
   --input: #2d2a3f;
 
-  /* Radii */
   --radius-base: 0.625rem;
   --radius-pill-base: 999px;
   --radius-card-base: 20px;
   --radius-input-base: 12px;
 
-  /* Fonts */
   --font-sans-family:
     "Poppins", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Spacing tokens */
   --space-section-size: 80px;
   --space-card-size: 24px;
 
-  /* Shadows */
   --shadow-hero-depth: 0 14px 36px
     color-mix(in srgb, var(--primary) 22%, transparent);
   --shadow-card-depth: 0 10px 26px color-mix(in srgb, #000 30%, transparent);
