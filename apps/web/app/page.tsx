@@ -1,5 +1,7 @@
 ﻿import Link from "next/link";
 
+import { Compass, MessageCircle, Music } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,98 +25,17 @@ const featureCards = [
   {
     title: "Music",
     description: "Bring your soundtrack to life with synced playback.",
-    icon: (
-      <svg
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-10 w-10"
-      >
-        <rect
-          x="8"
-          y="8"
-          width="32"
-          height="32"
-          rx="10"
-          fill="#ffffff"
-          opacity="0.95"
-        />
-        <path
-          d="M24 14v13.5a4.5 4.5 0 1 1-1.5-3.36V17l10-3v8.5a4.5 4.5 0 1 1-1.5-3.36V12L24 14Z"
-          fill="#a03df0"
-        />
-      </svg>
-    ),
+    icon: <Music className="text-primary h-8 w-8" aria-hidden="true" />,
   },
   {
     title: "Connect",
     description: "Unite with other listeners through chat and presence.",
-    icon: (
-      <svg
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-10 w-10"
-      >
-        <rect
-          x="7"
-          y="8"
-          width="34"
-          height="28"
-          rx="9"
-          fill="#ffffff"
-          opacity="0.95"
-        />
-        <path d="M15 18h18v2.5H15V18Zm0 6.5h11v2.5H15v-2.5Z" fill="#4b3f4e" />
-        <path
-          d="M32 28.5c0 1.38-.85 3-2.55 3H17l-3.5 4v-7"
-          stroke="#a03df0"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
+    icon: <MessageCircle className="text-primary h-8 w-8" aria-hidden="true" />,
   },
   {
     title: "Discover",
     description: "Explore, share, and comment on every beat together.",
-    icon: (
-      <svg
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-10 w-10"
-      >
-        <rect
-          x="9"
-          y="7"
-          width="30"
-          height="34"
-          rx="9"
-          fill="#ffffff"
-          opacity="0.95"
-        />
-        <path
-          d="M18 14h12"
-          stroke="#4b3f4e"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <path
-          d="M18 21h12"
-          stroke="#a03df0"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-        <path
-          d="M18 28h7"
-          stroke="#4b3f4e"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
+    icon: <Compass className="text-primary h-8 w-8" aria-hidden="true" />,
   },
 ];
 
@@ -346,7 +267,7 @@ export default function HomePage() {
                   className="h-full border border-white/70 bg-white/85 backdrop-blur transition-transform hover:-translate-y-1 hover:shadow-lg"
                 >
                   <CardHeader>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm">
                       {feature.icon}
                     </div>
                     <CardTitle className="text-foreground text-lg">
