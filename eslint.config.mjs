@@ -106,6 +106,7 @@ export default defineConfig([
           format: ["PascalCase"],
         },
       ],
+      "@typescript-eslint/prefer-nullish-coalescing": "off",
 
       /** React */
       "react/react-in-jsx-scope": "off",
