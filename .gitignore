@@ -10,3 +10,4 @@ apps/*/node_modules
 apps/edge/dist
 dist
 coverage
+.vscode
