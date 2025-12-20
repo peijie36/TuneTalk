@@ -1,5 +1,5 @@
 {
-  "name": "@tunetalk/edge",
+  "name": "@tunetalk/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
