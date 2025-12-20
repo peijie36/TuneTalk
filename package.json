@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm dev:web",
     "dev:web": "pnpm --filter @tunetalk/web dev",
-    "dev:edge": "pnpm --filter @tunetalk/edge dev",
+    "dev:api": "pnpm --filter @tunetalk/api dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
