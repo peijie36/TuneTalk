@@ -15,6 +15,6 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: true,
   },
-  trustedOrigins: [webOrigin, "http://localhost:8787"],
+  trustedOrigins: [webOrigin],
   plugins: [openAPI()],
 });
