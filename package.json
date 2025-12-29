@@ -12,7 +12,8 @@
     "dev:api": "pnpm --filter @tunetalk/api dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "drizzle-studio": "pnpm --filter @tunetalk/db db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^9.11.0",

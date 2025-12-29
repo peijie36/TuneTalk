@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 
 import { auth } from "@/src/lib/auth";
 interface HonoAuthVariables {
@@ -25,6 +26,7 @@ app.use(
     credentials: true,
   })
 );
+app.use(logger());
 
 app.use("*", async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -42,6 +44,8 @@ app.use("*", async (c, next) => {
 });
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+app.get("/", (c) => c.text("Hello, world!"));
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 app.get("/api/me", (c) => {
