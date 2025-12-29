@@ -1,6 +1,6 @@
 # Web (Next.js 16)
 
-Front-end client for TuneTalk built on the App Router, Tailwind CSS v4, and Supabase helpers.
+Front-end client for TuneTalk built on the App Router, Tailwind CSS v4, and Better Auth client helpers.
 
 ## Scripts
 
@@ -8,4 +8,4 @@ Front-end client for TuneTalk built on the App Router, Tailwind CSS v4, and Supa
 - `pnpm --filter @tunetalk/web build`
 - `pnpm --filter @tunetalk/web lint`
 
-Set Supabase environment variables in `.env.local` using `env.example`, then run `pnpm dev:web` to boot the prototype.
+Auth talks to the Hono service (default `http://localhost:8787`). Override with `NEXT_PUBLIC_API_URL` in `apps/web/.env.local` if needed, then run `pnpm dev:api` + `pnpm dev:web`.

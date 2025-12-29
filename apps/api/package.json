@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint ."
@@ -12,10 +12,12 @@
   "dependencies": {
     "@hono/node-server": "^1.7.0",
     "@hono/node-ws": "^1.0.3",
-    "@supabase/supabase-js": "^2.45.0",
+    "@tunetalk/db": "workspace:*",
     "@tunetalk/shared": "workspace:*",
+    "better-auth": "^1.4.7",
     "hono": "^4.4.5",
-    "zod": "^3.23.8"
+    "open-cli": "^8.0.0",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "tsx": "^4.7.2",

@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TuneTalk • Shared listening rooms",
   description:
-    "Create synced listening rooms with Supabase auth, realtime chat, and a Hono playback control plane.",
+    "Create synced listening rooms with Better Auth, realtime chat, and a Hono playback control plane.",
 };
 
 export default function RootLayout({

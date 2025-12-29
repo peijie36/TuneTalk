@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@tunetalk/shared/*": ["packages/shared/src/*"]
+      "@tunetalk/*": ["packages/*"]
     }
   }
 }
