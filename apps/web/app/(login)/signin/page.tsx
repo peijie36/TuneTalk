@@ -8,12 +8,12 @@ function normalizeCallbackURL(value: SearchParams["callbackURL"]) {
   return value;
 }
 
-export default function SignInPage({
+export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: SearchParams | Promise<SearchParams>;
 }) {
-  const callbackURL = normalizeCallbackURL(searchParams.callbackURL);
+  const callbackURL = normalizeCallbackURL((await searchParams).callbackURL);
 
   return <SignInForm callbackURL={callbackURL} />;
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,42 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const submitSignUp = useCallback(async () => {
+    if (isSubmitting) return;
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await authClient.signUp.email({
+        name,
+        email,
+        password,
+        callbackURL: "/",
+      });
+
+      if (error) {
+        setError(error.message ?? "Sign up failed.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Sign up failed.");
+      setIsSubmitting(false);
+    }
+  }, [email, isSubmitting, name, password, router]);
+
+  const handleSignUpSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void submitSignUp();
+    },
+    [submitSignUp]
+  );
+
   return (
     <Card className="w-full max-w-md border border-white/70 bg-white/85 backdrop-blur">
       <CardHeader>
@@ -34,32 +70,7 @@ export default function SignUpPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          className="flex flex-col gap-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void (async () => {
-              setError(null);
-              setIsSubmitting(true);
-
-              const { error } = await authClient.signUp.email({
-                name,
-                email,
-                password,
-                callbackURL: "/",
-              });
-
-              if (error) {
-                setError(error.message ?? "Sign up failed.");
-                setIsSubmitting(false);
-                return;
-              }
-
-              router.push("/");
-              router.refresh();
-            })();
-          }}
-        >
+        <form className="flex flex-col gap-5" onSubmit={handleSignUpSubmit}>
           <div className="grid gap-2">
             <Label htmlFor="name">Name</Label>
             <Input

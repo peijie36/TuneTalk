@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,62 @@ export default function SignInForm({ callbackURL }: { callbackURL: string }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleContinueClick = useCallback(() => {
+    router.push(callbackURL);
+  }, [router, callbackURL]);
+
+  const signOut = useCallback(async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+
+    try {
+      await authClient.signOut();
+      router.refresh();
+    } finally {
+      setIsSigningOut(false);
+    }
+  }, [isSigningOut, router]);
+
+  const handleSignOutClick = useCallback(() => {
+    void signOut();
+  }, [signOut]);
+
+  const submitSignIn = useCallback(async () => {
+    if (isSubmitting) return;
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await authClient.signIn.email({
+        email,
+        password,
+        callbackURL,
+      });
+
+      if (error) {
+        setError(error.message ?? "Sign in failed.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      router.push(callbackURL);
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Sign in failed.");
+      setIsSubmitting(false);
+    }
+  }, [callbackURL, email, isSubmitting, password, router]);
+
+  const handleSignInSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void submitSignIn();
+    },
+    [submitSignIn]
+  );
 
   if (session) {
     return (
@@ -35,20 +91,11 @@ export default function SignInForm({ callbackURL }: { callbackURL: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button
-            onClick={() => {
-              router.push(callbackURL);
-            }}
-          >
-            Continue
-          </Button>
+          <Button onClick={handleContinueClick}>Continue</Button>
           <Button
             variant="ghost"
-            onClick={() => {
-              void authClient.signOut().then(() => {
-                router.refresh();
-              });
-            }}
+            onClick={handleSignOutClick}
+            disabled={isSigningOut}
           >
             Sign out
           </Button>
@@ -66,31 +113,7 @@ export default function SignInForm({ callbackURL }: { callbackURL: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form
-          className="flex flex-col gap-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void (async () => {
-              setError(null);
-              setIsSubmitting(true);
-
-              const { error } = await authClient.signIn.email({
-                email,
-                password,
-                callbackURL,
-              });
-
-              if (error) {
-                setError(error.message ?? "Sign in failed.");
-                setIsSubmitting(false);
-                return;
-              }
-
-              router.push(callbackURL);
-              router.refresh();
-            })();
-          }}
-        >
+        <form className="flex flex-col gap-5" onSubmit={handleSignInSubmit}>
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
             <Input
