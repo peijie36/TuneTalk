@@ -2,6 +2,7 @@
 
 import { Compass, MessageCircle, Music } from "lucide-react";
 
+import AuthButtons from "@/components/auth/auth-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,14 +95,7 @@ export default function HomePage() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/signin">Sign in</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/signup">Create account</Link>
-            </Button>
-          </div>
+          <AuthButtons />
         </div>
       </header>
 
