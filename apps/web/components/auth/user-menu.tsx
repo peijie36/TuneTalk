@@ -38,16 +38,10 @@ export default function UserMenu({
       if (!rootRef.current?.contains(target)) setOpen(false);
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
 
@@ -82,10 +76,10 @@ export default function UserMenu({
           <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
         </Avatar>
         <div className="hidden min-w-0 flex-col text-left sm:flex">
-          <span className="max-w-[10rem] truncate text-sm leading-none font-semibold">
+          <span className="max-w-40 truncate text-sm leading-none font-semibold">
             {displayName}
           </span>
-          <span className="text-muted-foreground max-w-[10rem] truncate text-xs leading-tight">
+          <span className="text-muted-foreground max-w-40 truncate text-xs leading-tight">
             {email}
           </span>
         </div>
@@ -96,7 +90,7 @@ export default function UserMenu({
         <div
           role="menu"
           aria-label="User menu"
-          className="border-border/70 absolute right-0 z-50 mt-3 w-[240px] rounded-2xl border bg-white p-2 shadow-[0_18px_40px_rgba(0,0,0,0.12)]"
+          className="border-border/70 absolute right-0 z-50 mt-3 w-60 rounded-2xl border bg-white p-2 shadow-[0_18px_40px_rgba(0,0,0,0.12)]"
         >
           <div className="px-3 py-2">
             <div className="text-text-strong truncate text-sm font-semibold">
