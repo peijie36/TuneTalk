@@ -7,15 +7,17 @@ export default function DiscoverLoading() {
     <div className="bg-background relative min-h-screen">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
-      <div className="tt-container flex flex-col gap-5 py-8 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-        <Skeleton className="order-2 h-12 w-full rounded-full bg-white/55 sm:order-1 sm:max-w-[360px]" />
-        <div className="order-1 flex flex-wrap items-center justify-center gap-3 sm:order-2">
-          <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
-          <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
-          <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
+      <header className="border-border/60 sticky top-0 z-30 border-b bg-white/85 shadow-[0_12px_30px_rgba(0,0,0,0.04)] backdrop-blur-lg supports-backdrop-filter:bg-white/80">
+        <div className="tt-container flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
+          <Skeleton className="order-2 h-12 w-full rounded-full bg-white/55 sm:order-1 sm:max-w-[360px]" />
+          <div className="order-1 flex flex-wrap items-center justify-center gap-3 sm:order-2">
+            <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
+            <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
+            <Skeleton className="h-11 w-28 rounded-full bg-white/55" />
+          </div>
+          <Skeleton className="order-3 h-12 w-52 rounded-full bg-white/55" />
         </div>
-        <Skeleton className="order-3 h-12 w-52 rounded-full bg-white/55" />
-      </div>
+      </header>
 
       <main className="tt-container pb-16">
         <section className="rounded-[34px] bg-black/55 p-6 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur sm:p-8 lg:p-10">
