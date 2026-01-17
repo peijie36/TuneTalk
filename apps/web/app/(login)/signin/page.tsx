@@ -3,8 +3,10 @@ import SignInForm from "./sign-in-form";
 type SearchParams = Record<string, string | string[] | undefined>;
 
 function normalizeCallbackURL(value: SearchParams["callbackURL"]) {
-  if (typeof value !== "string") return "/";
-  if (!value.startsWith("/")) return "/";
+  const fallback = "/discover";
+  if (typeof value !== "string") return fallback;
+  if (!value.startsWith("/")) return fallback;
+  if (value === "/signin" || value === "/signup") return fallback;
   return value;
 }
 

@@ -38,6 +38,9 @@ export const room = pgTable(
   ]
 );
 
+export type RoomRow = typeof room.$inferSelect;
+export type RoomInsert = typeof room.$inferInsert;
+
 export const roomMember = pgTable(
   "room_member",
   {
