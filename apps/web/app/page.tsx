@@ -3,6 +3,7 @@
 import { Compass, MessageCircle, Music } from "lucide-react";
 
 import AuthButtons from "@/components/auth/auth-buttons";
+import AppHeader from "@/components/layout/app-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,40 +65,38 @@ export default function HomePage() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/30 to-white/80" />
 
       {/* Sticky header with branding and navigation */}
-      <header className="border-border/60 sticky top-0 z-30 border-b bg-white/85 shadow-[0_12px_30px_rgba(0,0,0,0.04)] backdrop-blur-lg supports-backdrop-filter:bg-white/80">
-        <div className="tt-container flex items-center justify-between py-4 sm:py-5">
-          <div className="flex flex-col">
-            <span className="text-foreground text-2xl font-semibold">
-              TuneTalk
-            </span>
-            <span className="text-muted-foreground text-sm">
-              Music, community, endless vibes
-            </span>
-          </div>
-
-          <nav className="hidden items-center gap-6 text-sm font-medium sm:flex">
-            {navLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className={cn(
-                  "relative transition-colors",
-                  link.active
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-primary"
-                )}
-              >
-                {link.label}
-                {link.active ? (
-                  <span className="bg-primary absolute inset-x-0 -bottom-2 mx-auto h-1 w-2 rounded-full" />
-                ) : null}
-              </Link>
-            ))}
-          </nav>
-
-          <AuthButtons />
+      <AppHeader containerClassName="flex items-center justify-between py-4 sm:py-5">
+        <div className="flex flex-col">
+          <span className="text-foreground text-2xl font-semibold">
+            TuneTalk
+          </span>
+          <span className="text-muted-foreground text-sm">
+            Music, community, endless vibes
+          </span>
         </div>
-      </header>
+
+        <nav className="hidden items-center gap-6 text-sm font-medium sm:flex">
+          {navLinks.map((link) => (
+            <Link
+              key={link.label}
+              href={link.href}
+              className={cn(
+                "relative transition-colors",
+                link.active
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-primary"
+              )}
+            >
+              {link.label}
+              {link.active ? (
+                <span className="bg-primary absolute inset-x-0 -bottom-2 mx-auto h-1 w-2 rounded-full" />
+              ) : null}
+            </Link>
+          ))}
+        </nav>
+
+        <AuthButtons />
+      </AppHeader>
 
       <main className="flex flex-1 flex-col gap-16 pb-16">
         {/* Hero section with primary CTA and mocked room UI */}
