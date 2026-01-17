@@ -9,10 +9,10 @@ import {
   useState,
 } from "react";
 
-import { ChevronDown, RefreshCcw, Search } from "lucide-react";
+import { RefreshCcw, Search } from "lucide-react";
 
+import UserMenu from "@/components/auth/user-menu";
 import AppHeader from "@/components/layout/app-header";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,13 +29,6 @@ const ROOMS_PER_PAGE = 5;
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts.at(0)?.[0] ?? "";
-  const last = parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "";
-  return `${first}${last}`.toUpperCase();
 }
 
 const roomSearchIndex = new Map(
@@ -190,29 +183,10 @@ export default function DiscoverPage() {
           {isSessionPending ? (
             <Skeleton className="h-12 w-56 rounded-full bg-white/55" />
           ) : session ? (
-            <button
-              type="button"
-              className="border-border/80 text-text-strong focus-visible:ring-ring focus-visible:ring-offset-background inline-flex items-center gap-3 rounded-full border bg-white/75 px-4 py-2.5 shadow-sm backdrop-blur transition-colors hover:bg-white/85 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-              aria-label="Open user menu"
-            >
-              <Avatar className="h-9 w-9 border border-white/60">
-                <AvatarFallback>
-                  {getInitials(session.user.name ?? session.user.email)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="hidden min-w-0 flex-col text-left sm:flex">
-                <span className="max-w-[10rem] truncate text-sm leading-none font-semibold">
-                  {session.user.name ?? session.user.email}
-                </span>
-                <span className="text-muted-foreground max-w-[10rem] truncate text-xs leading-tight">
-                  {session.user.email}
-                </span>
-              </div>
-              <ChevronDown
-                className="text-muted-foreground h-4 w-4"
-                aria-hidden="true"
-              />
-            </button>
+            <UserMenu
+              displayName={session.user.name ?? session.user.email}
+              email={session.user.email}
+            />
           ) : (
             <Button
               asChild
