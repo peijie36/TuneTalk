@@ -86,17 +86,6 @@ export default function UserMenu({
           aria-label="User menu"
           className="border-border/70 absolute right-0 z-50 mt-3 w-60 rounded-2xl border bg-white p-2 shadow-[0_18px_40px_rgba(0,0,0,0.12)]"
         >
-          <div className="px-3 py-2">
-            <div className="text-text-strong truncate text-sm font-semibold">
-              {displayName}
-            </div>
-            <div className="text-muted-foreground truncate text-xs">
-              {email}
-            </div>
-          </div>
-
-          <div className="border-border/60 my-2 border-t" />
-
           <Button
             type="button"
             variant="ghost"
