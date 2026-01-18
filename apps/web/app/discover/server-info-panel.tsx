@@ -8,9 +8,11 @@ import type { Room } from "./rooms-mock";
 export default function ServerInfoPanel({
   selectedRoom,
   canJoinSelected,
+  onJoinRoom,
 }: {
   selectedRoom: Room | null;
   canJoinSelected: boolean;
+  onJoinRoom: (roomId: string) => void;
 }) {
   return (
     <Card className="bg-surface/80 border-border/70 flex h-[400px] flex-col rounded-[28px] border shadow-sm backdrop-blur lg:h-[460px]">
@@ -46,12 +48,18 @@ export default function ServerInfoPanel({
           </p>
         </div>
 
-        <Button
-          className="mt-auto h-12 w-full max-w-[190px]"
-          disabled={!canJoinSelected}
-        >
-          Join
-        </Button>
+        {selectedRoom && canJoinSelected ? (
+          <Button
+            className="mt-auto h-12 w-full max-w-[190px]"
+            onClick={() => onJoinRoom(selectedRoom.id)}
+          >
+            Join
+          </Button>
+        ) : (
+          <Button className="mt-auto h-12 w-full max-w-[190px]" disabled>
+            Join
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

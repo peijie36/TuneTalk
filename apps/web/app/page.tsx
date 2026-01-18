@@ -4,6 +4,7 @@ import { Compass, MessageCircle, Music } from "lucide-react";
 
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
+import PrimaryNav from "@/components/layout/primary-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,13 +15,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
-
-// Navigation items rendered in the sticky header
-const navLinks = [
-  { label: "Home", href: "#top", active: true },
-  { label: "Features", href: "#features", active: false },
-  { label: "Community", href: "#community", active: false },
-];
 
 // Feature grid content with inline SVG icons
 const featureCards = [
@@ -65,8 +59,8 @@ export default function HomePage() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/30 to-white/80" />
 
       {/* Sticky header with branding and navigation */}
-      <AppHeader containerClassName="flex items-center justify-between py-4 sm:py-5">
-        <div className="flex flex-col">
+      <AppHeader containerClassName="relative flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
+        <div className="order-1 flex flex-col">
           <span className="text-foreground text-2xl font-semibold">
             TuneTalk
           </span>
@@ -75,27 +69,11 @@ export default function HomePage() {
           </span>
         </div>
 
-        <nav className="hidden items-center gap-6 text-sm font-medium sm:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className={cn(
-                "relative transition-colors",
-                link.active
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-primary"
-              )}
-            >
-              {link.label}
-              {link.active ? (
-                <span className="bg-primary absolute inset-x-0 -bottom-2 mx-auto h-1 w-2 rounded-full" />
-              ) : null}
-            </Link>
-          ))}
-        </nav>
+        <PrimaryNav className="order-2 sm:absolute sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2" />
 
-        <AuthButtons />
+        <div className="order-3 flex justify-end">
+          <AuthButtons />
+        </div>
       </AppHeader>
 
       <main className="flex flex-1 flex-col gap-16 pb-16">

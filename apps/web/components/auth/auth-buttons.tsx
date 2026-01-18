@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
+import UserMenu from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 export default function AuthButtons() {
-  const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
@@ -37,21 +36,9 @@ export default function AuthButtons() {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="text-muted-foreground hidden text-sm sm:block">
-        {session.user.name ?? session.user.email}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => {
-          void authClient.signOut().then(() => {
-            router.refresh();
-          });
-        }}
-      >
-        Sign out
-      </Button>
-    </div>
+    <UserMenu
+      displayName={session.user.name ?? session.user.email}
+      email={session.user.email}
+    />
   );
 }

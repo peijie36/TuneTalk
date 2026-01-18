@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useDeferredValue,
@@ -11,54 +11,76 @@ import {
 
 import { RefreshCcw, Search } from "lucide-react";
 
-import UserMenu from "@/components/auth/user-menu";
+import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
+import PrimaryNav from "@/components/layout/primary-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
+import { normalizeText } from "@/utils/string-utils";
 
 import RoomRow from "./room-row";
-import { mockRooms, mockRoomsByCreatedAt, type Room } from "./rooms-mock";
+import type { Room } from "./rooms-mock";
 import ServerInfoPanel from "./server-info-panel";
+import { useRooms } from "./use-rooms";
 
 type RoomFilter = "all" | "public" | "private";
 
 const ROOMS_PER_PAGE = 5;
 
-function normalize(value: string) {
-  return value.trim().toLowerCase();
-}
-
-const roomSearchIndex = new Map(
-  mockRooms.map((room) => [
-    room.id,
-    normalize(
-      [
-        room.name,
-        room.host.name,
-        room.nowPlaying.title,
-        room.nowPlaying.artist,
-      ].join(" ")
-    ),
-  ])
-);
+const FILTER_OPTIONS: readonly { value: RoomFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "public", label: "Public" },
+  { value: "private", label: "Private" },
+];
 
 export default function DiscoverPage() {
+  const router = useRouter();
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
 
-  const [selectedRoomId, setSelectedRoomId] = useState<string>(
-    () => mockRoomsByCreatedAt[0]?.id ?? ""
-  );
+  const {
+    rooms,
+    isFetching: isRoomsFetching,
+    refresh: refreshRooms,
+  } = useRooms();
+
+  const [selectedRoomId, setSelectedRoomId] = useState<string>("");
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [filter, setFilter] = useState<RoomFilter>("all");
   const [pageIndex, setPageIndex] = useState(0);
 
-  const rooms = mockRoomsByCreatedAt;
+  useEffect(() => {
+    const firstRoomId = rooms.at(0)?.id ?? "";
+    if (!firstRoomId) return;
+
+    if (!selectedRoomId) {
+      setSelectedRoomId(firstRoomId);
+      return;
+    }
+
+    const exists = rooms.some((room) => room.id === selectedRoomId);
+    if (!exists) setSelectedRoomId(firstRoomId);
+  }, [rooms, selectedRoomId]);
+
+  const roomSearchIndex = useMemo(() => {
+    return new Map(
+      rooms.map((room) => [
+        room.id,
+        normalizeText(
+          [
+            room.name,
+            room.host.name,
+            room.nowPlaying.title,
+            room.nowPlaying.artist,
+          ].join(" ")
+        ),
+      ])
+    );
+  }, [rooms]);
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
@@ -67,10 +89,13 @@ export default function DiscoverPage() {
 
   const canJoinSelected =
     !!selectedRoom &&
-    selectedRoom.participants.current < selectedRoom.participants.capacity;
+    selectedRoom.participants.current < selectedRoom.participants.capacity &&
+    !isSessionPending;
 
   const filteredRooms = useMemo(() => {
-    const q = normalize(deferredQuery);
+    const q = normalizeText(deferredQuery);
+
+    if (!q && filter === "all") return rooms;
 
     const matchesFilter = (room: Room) => {
       if (filter === "public") return room.visibility === "public";
@@ -82,7 +107,7 @@ export default function DiscoverPage() {
       !q || (roomSearchIndex.get(room.id) ?? "").includes(q);
 
     return rooms.filter((room) => matchesFilter(room) && matchesQuery(room));
-  }, [deferredQuery, filter, rooms]);
+  }, [deferredQuery, filter, roomSearchIndex, rooms]);
 
   const pageCount = useMemo(() => {
     if (filteredRooms.length === 0) return 0;
@@ -103,10 +128,6 @@ export default function DiscoverPage() {
     return filteredRooms.slice(start, start + ROOMS_PER_PAGE);
   }, [filteredRooms, pageIndex]);
 
-  const handleRefresh = useCallback(() => {
-    setPageIndex(0);
-  }, []);
-
   const handleReset = useCallback(() => {
     setQuery("");
     setFilter("all");
@@ -115,6 +136,31 @@ export default function DiscoverPage() {
   const handleSelectRoom = useCallback((roomId: string) => {
     setSelectedRoomId(roomId);
   }, []);
+
+  const handleJoinRoom = useCallback(
+    (roomId: string) => {
+      if (isSessionPending) return;
+      if (!session) {
+        router.push(
+          `/signin?callbackURL=${encodeURIComponent(`/room/${roomId}`)}`
+        );
+        return;
+      }
+      setSelectedRoomId(roomId);
+      router.push(`/room/${roomId}`);
+    },
+    [isSessionPending, router, session]
+  );
+
+  const handleRefresh = useCallback(() => {
+    setPageIndex(0);
+    refreshRooms();
+  }, [refreshRooms]);
+
+  const handleJoinSelected = useCallback(() => {
+    if (!selectedRoom) return;
+    handleJoinRoom(selectedRoom.id);
+  }, [handleJoinRoom, selectedRoom]);
 
   const handlePrevPage = useCallback(() => {
     setPageIndex((current) => Math.max(0, current - 1));
@@ -128,8 +174,8 @@ export default function DiscoverPage() {
     <div className="bg-background relative min-h-screen">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
-      <AppHeader containerClassName="flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
-        <div className="order-2 w-full sm:order-1 sm:max-w-[360px]">
+      <AppHeader containerClassName="relative flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
+        <div className="order-1 w-full sm:max-w-[360px]">
           <label htmlFor="room-search" className="sr-only">
             Search rooms
           </label>
@@ -148,54 +194,10 @@ export default function DiscoverPage() {
           </div>
         </div>
 
-        <nav
-          aria-label="Primary"
-          className="order-1 flex flex-wrap items-center justify-center gap-3 sm:order-2"
-        >
-          {[
-            { label: "Home", href: "/" },
-            { label: "Browse", href: "/browse" },
-            { label: "Discover", href: "/discover", active: true },
-          ].map((item) => (
-            <Button
-              key={item.label}
-              asChild
-              variant={item.active ? "default" : "secondary"}
-              size="sm"
-              className={cn(
-                "h-11 px-7",
-                item.active
-                  ? "shadow-[0_12px_28px_rgba(160,61,240,0.25)]"
-                  : "bg-white/55 backdrop-blur"
-              )}
-            >
-              <Link
-                href={item.href}
-                aria-current={item.active ? "page" : undefined}
-              >
-                {item.label}
-              </Link>
-            </Button>
-          ))}
-        </nav>
+        <PrimaryNav className="order-2 sm:absolute sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2" />
 
         <div className="order-3 flex items-center justify-end">
-          {isSessionPending ? (
-            <Skeleton className="h-12 w-56 rounded-full bg-white/55" />
-          ) : session ? (
-            <UserMenu
-              displayName={session.user.name ?? session.user.email}
-              email={session.user.email}
-            />
-          ) : (
-            <Button
-              asChild
-              variant="secondary"
-              className="bg-white/55 backdrop-blur"
-            >
-              <Link href="/signin">Sign in</Link>
-            </Button>
-          )}
+          <AuthButtons />
         </div>
       </AppHeader>
 
@@ -210,32 +212,31 @@ export default function DiscoverPage() {
               <ServerInfoPanel
                 selectedRoom={selectedRoom}
                 canJoinSelected={canJoinSelected}
+                onJoinRoom={handleJoinRoom}
               />
             </div>
 
             <div className="space-y-5 lg:col-start-2 lg:row-start-1">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
-                  {(
-                    [
-                      ["all", "All"],
-                      ["public", "Public"],
-                      ["private", "Private"],
-                    ] as const
-                  ).map(([value, label]) => (
+                  {FILTER_OPTIONS.map((option) => (
                     <Button
-                      key={value}
+                      key={option.value}
                       type="button"
                       size="sm"
-                      variant={filter === value ? "default" : "secondary"}
+                      variant={
+                        filter === option.value ? "default" : "secondary"
+                      }
                       className={cn(
                         "h-10 px-5",
-                        filter === value ? "" : "bg-white/55 backdrop-blur"
+                        filter === option.value
+                          ? ""
+                          : "bg-white/55 backdrop-blur"
                       )}
-                      aria-pressed={filter === value}
-                      onClick={() => setFilter(value)}
+                      aria-pressed={filter === option.value}
+                      onClick={() => setFilter(option.value)}
                     >
-                      {label}
+                      {option.label}
                     </Button>
                   ))}
                 </div>
@@ -282,7 +283,7 @@ export default function DiscoverPage() {
                       room={room}
                       isSelected={room.id === selectedRoomId}
                       onSelect={handleSelectRoom}
-                      onJoin={handleSelectRoom}
+                      onJoin={handleJoinRoom}
                     />
                   ))
                 )}
@@ -339,9 +340,7 @@ export default function DiscoverPage() {
                     type="button"
                     className="h-12 px-10"
                     disabled={!canJoinSelected}
-                    onClick={() => {
-                      if (selectedRoom) setSelectedRoomId(selectedRoom.id);
-                    }}
+                    onClick={handleJoinSelected}
                   >
                     Join
                   </Button>
@@ -350,6 +349,7 @@ export default function DiscoverPage() {
                     variant="secondary"
                     className="h-12 px-8"
                     onClick={handleRefresh}
+                    disabled={isRoomsFetching}
                   >
                     <RefreshCcw className="h-4 w-4" aria-hidden="true" />
                     Refresh

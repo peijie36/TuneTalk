@@ -8,13 +8,7 @@ import { ChevronDown, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-
-function getInitials(value: string) {
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  const first = parts.at(0)?.[0] ?? "";
-  const last = parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "";
-  return `${first}${last}`.toUpperCase();
-}
+import { getInitials } from "@/utils/string-utils";
 
 export default function UserMenu({
   displayName,

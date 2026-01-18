@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -14,14 +13,14 @@ import {
   Users,
 } from "lucide-react";
 
-import UserMenu from "@/components/auth/user-menu";
+import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
+import PrimaryNav from "@/components/layout/primary-nav";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
 import { getInitials, normalizeText } from "@/utils/string-utils";
@@ -45,8 +44,7 @@ export default function RoomPage() {
         : "unknown";
 
   const router = useRouter();
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
+  const { data: session } = authClient.useSession();
 
   const roomDetail = useMemo(() => getMockRoom(roomId), [roomId]);
   const roomSummary = useMemo(
@@ -141,8 +139,8 @@ export default function RoomPage() {
     <div className="bg-background relative min-h-screen">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
-      <AppHeader containerClassName="flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
-        <div className="order-2 w-full sm:order-1 sm:max-w-[360px]">
+      <AppHeader containerClassName="relative flex flex-col gap-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:py-5">
+        <div className="order-1 w-full sm:max-w-[360px]">
           <label htmlFor="participant-search" className="sr-only">
             Search participants
           </label>
@@ -161,54 +159,10 @@ export default function RoomPage() {
           </div>
         </div>
 
-        <nav
-          aria-label="Primary"
-          className="order-1 flex flex-wrap items-center justify-center gap-3 sm:order-2"
-        >
-          {[
-            { label: "Home", href: "/" },
-            { label: "Browse", href: "/browse" },
-            { label: "Room", href: `/room/${roomId}`, active: true },
-          ].map((item) => (
-            <Button
-              key={item.label}
-              asChild
-              variant={item.active ? "default" : "secondary"}
-              size="sm"
-              className={cn(
-                "h-11 px-7",
-                item.active
-                  ? "shadow-[0_12px_28px_rgba(160,61,240,0.25)]"
-                  : "bg-white/55 backdrop-blur"
-              )}
-            >
-              <Link
-                href={item.href}
-                aria-current={item.active ? "page" : undefined}
-              >
-                {item.label}
-              </Link>
-            </Button>
-          ))}
-        </nav>
+        <PrimaryNav className="order-2 sm:absolute sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2" />
 
         <div className="order-3 flex items-center justify-end">
-          {isSessionPending ? (
-            <Skeleton className="h-12 w-56 rounded-full bg-white/55" />
-          ) : session ? (
-            <UserMenu
-              displayName={session.user.name ?? session.user.email}
-              email={session.user.email}
-            />
-          ) : (
-            <Button
-              asChild
-              variant="secondary"
-              className="bg-white/55 backdrop-blur"
-            >
-              <Link href="/signin">Sign in</Link>
-            </Button>
-          )}
+          <AuthButtons />
         </div>
       </AppHeader>
 

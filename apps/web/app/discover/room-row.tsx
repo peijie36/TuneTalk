@@ -50,6 +50,7 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
         "group border-border/70 focus-visible:ring-ring focus-visible:ring-offset-background w-full cursor-pointer rounded-3xl border px-5 py-4 text-left shadow-sm backdrop-blur transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
         isSelected ? "bg-white/55" : "bg-white/88 hover:bg-white/75"
       )}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "116px" }}
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
