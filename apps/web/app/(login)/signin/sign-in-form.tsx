@@ -85,7 +85,7 @@ export default function SignInForm({ callbackURL }: { callbackURL: string }) {
     return (
       <Card className="w-full max-w-md border border-white/70 bg-white/85 backdrop-blur">
         <CardHeader>
-          <CardTitle>You’re signed in</CardTitle>
+          <CardTitle>You're signed in</CardTitle>
           <CardDescription>
             Continue back to the app, or sign out to switch accounts.
           </CardDescription>
@@ -150,7 +150,7 @@ export default function SignInForm({ callbackURL }: { callbackURL: string }) {
           </Button>
 
           <p className="text-muted-foreground text-sm">
-            Don’t have an account?{" "}
+            Don't have an account?{" "}
             <Link href="/signup" className="text-primary font-semibold">
               Create one
             </Link>

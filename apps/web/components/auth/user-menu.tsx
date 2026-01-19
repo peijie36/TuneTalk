@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChevronDown, LogOut } from "lucide-react";
@@ -18,6 +18,7 @@ export default function UserMenu({
   email: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const [open, setOpen] = useState(false);
@@ -50,11 +51,16 @@ export default function UserMenu({
     try {
       await authClient.signOut();
       setOpen(false);
+
+      if (pathname.startsWith("/room/")) {
+        router.replace("/discover");
+      }
+
       router.refresh();
     } finally {
       setIsSigningOut(false);
     }
-  }, [isSigningOut, router]);
+  }, [isSigningOut, pathname, router]);
 
   return (
     <div ref={rootRef} className="relative">
