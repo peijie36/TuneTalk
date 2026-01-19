@@ -3,14 +3,14 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { Room } from "./rooms-mock";
+import type { RoomSummary } from "@tunetalk/shared";
 
 export default function ServerInfoPanel({
   selectedRoom,
   canJoinSelected,
   onJoinRoom,
 }: {
-  selectedRoom: Room | null;
+  selectedRoom: RoomSummary | null;
   canJoinSelected: boolean;
   onJoinRoom: (roomId: string) => void;
 }) {

@@ -1,7 +1,9 @@
 import { createAuthClient } from "better-auth/react";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787",
+  baseURL: API_BASE_URL,
   fetchOptions: {
     credentials: "include",
   },

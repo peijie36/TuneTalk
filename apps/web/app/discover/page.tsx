@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useDeferredValue,
@@ -11,17 +11,20 @@ import {
 
 import { RefreshCcw, Search } from "lucide-react";
 
+import type { RoomSummary } from "@tunetalk/shared";
+
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
+import CreateRoomModal from "@/components/rooms/create-room-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCreateRoom } from "@/hooks/use-create-room";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
 import { normalizeText } from "@/utils/string-utils";
 
 import RoomRow from "./room-row";
-import type { Room } from "./rooms-mock";
 import ServerInfoPanel from "./server-info-panel";
 import { useRooms } from "./use-rooms";
 
@@ -37,6 +40,7 @@ const FILTER_OPTIONS: readonly { value: RoomFilter; label: string }[] = [
 
 export default function DiscoverPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
 
@@ -52,6 +56,8 @@ export default function DiscoverPage() {
   const deferredQuery = useDeferredValue(query);
   const [filter, setFilter] = useState<RoomFilter>("all");
   const [pageIndex, setPageIndex] = useState(0);
+  const createRoom = useCreateRoom();
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const firstRoomId = rooms.at(0)?.id ?? "";
@@ -97,13 +103,13 @@ export default function DiscoverPage() {
 
     if (!q && filter === "all") return rooms;
 
-    const matchesFilter = (room: Room) => {
+    const matchesFilter = (room: RoomSummary) => {
       if (filter === "public") return room.visibility === "public";
       if (filter === "private") return room.visibility === "private";
       return true;
     };
 
-    const matchesQuery = (room: Room) =>
+    const matchesQuery = (room: RoomSummary) =>
       !q || (roomSearchIndex.get(room.id) ?? "").includes(q);
 
     return rooms.filter((room) => matchesFilter(room) && matchesQuery(room));
@@ -117,6 +123,25 @@ export default function DiscoverPage() {
   useEffect(() => {
     setPageIndex(0);
   }, [filter, deferredQuery]);
+
+  useEffect(() => {
+    const toast = searchParams.get("toast");
+    if (!toast) return;
+
+    if (toast === "disbanded") {
+      setToastMessage("The host disbanded the room.");
+    } else if (toast === "room_not_found") {
+      setToastMessage("That room no longer exists.");
+    }
+
+    window.history.replaceState(null, "", "/discover");
+  }, [router, searchParams]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timeout = window.setTimeout(() => setToastMessage(null), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [toastMessage]);
 
   useEffect(() => {
     if (pageCount === 0) return;
@@ -156,6 +181,22 @@ export default function DiscoverPage() {
     setPageIndex(0);
     refreshRooms();
   }, [refreshRooms]);
+
+  const handleCreateClick = useCallback(() => {
+    if (isSessionPending) return;
+    if (!session) {
+      router.push(`/signin?callbackURL=${encodeURIComponent("/discover")}`);
+      return;
+    }
+
+    createRoom.openModal();
+  }, [createRoom, isSessionPending, router, session]);
+
+  const handleCreateSubmit = useCallback(async () => {
+    if (!session || isSessionPending) return;
+    const result = await createRoom.submit();
+    if (result.ok) router.push(`/room/${result.id}`);
+  }, [createRoom, isSessionPending, router, session]);
 
   const handleJoinSelected = useCallback(() => {
     if (!selectedRoom) return;
@@ -333,6 +374,8 @@ export default function DiscoverPage() {
                     type="button"
                     variant="secondary"
                     className="h-12 px-8"
+                    onClick={handleCreateClick}
+                    disabled={isSessionPending}
                   >
                     Create
                   </Button>
@@ -360,6 +403,43 @@ export default function DiscoverPage() {
           </div>
         </section>
       </main>
+
+      {toastMessage ? (
+        <div className="fixed top-4 right-4 z-50 w-full max-w-sm px-4 sm:px-0">
+          <div
+            role="status"
+            className="border-border/70 rounded-2xl border bg-white/85 px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)] backdrop-blur"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-text-strong text-sm font-medium">
+                {toastMessage}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setToastMessage(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <CreateRoomModal
+        open={createRoom.open}
+        name={createRoom.name}
+        isPublic={createRoom.isPublic}
+        password={createRoom.password}
+        error={createRoom.error}
+        isCreating={createRoom.isCreating}
+        onNameChange={createRoom.setName}
+        onIsPublicChange={createRoom.setIsPublic}
+        onPasswordChange={createRoom.setPassword}
+        onCancel={createRoom.closeModal}
+        onSubmit={() => void handleCreateSubmit()}
+      />
     </div>
   );
 }

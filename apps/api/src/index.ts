@@ -5,12 +5,13 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { auth } from "@/src/lib/auth";
-interface HonoAuthVariables {
-  Variables: {
-    user: typeof auth.$Infer.Session.user;
-    session: typeof auth.$Infer.Session.session;
-  };
-}
+import type { HonoAuthVariables } from "@/src/lib/hono-types";
+import {
+  addRoomConnection,
+  handleRoomMessage,
+  removeRoomConnection,
+} from "@/src/lib/room-realtime";
+import { roomsRoute } from "@/src/routes/rooms";
 
 const app = new Hono<HonoAuthVariables>();
 const nodeWebSocket = createNodeWebSocket({ app });
@@ -58,6 +59,30 @@ app.get("/api/me", (c) => {
 
   return c.json({ user, session });
 });
+
+app.get(
+  "/api/rooms/:roomId/ws",
+  nodeWebSocket.upgradeWebSocket((c) => {
+    const roomId = c.req.param("roomId");
+
+    return {
+      onOpen: (_event, ws) => {
+        addRoomConnection(roomId, ws);
+      },
+      onMessage: (event, ws) => {
+        handleRoomMessage(roomId, ws, event.data);
+      },
+      onClose: (_event, ws) => {
+        removeRoomConnection(roomId, ws);
+      },
+      onError: (_event, ws) => {
+        removeRoomConnection(roomId, ws);
+      },
+    };
+  })
+);
+
+app.route("/api/rooms", roomsRoute);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });

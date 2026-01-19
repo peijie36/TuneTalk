@@ -2,32 +2,34 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { mockRoomsByCreatedAt, type Room } from "./rooms-mock";
+import type { RoomSummary } from "@tunetalk/shared";
+
+import { API_BASE_URL } from "@/lib/constants";
+
+import { mockRoomsByCreatedAt } from "./rooms-mock";
 
 type RoomsSource = "mock" | "api";
 
 interface RoomsResult {
-  rooms: Room[];
+  rooms: RoomSummary[];
   isFetching: boolean;
   error: string | null;
   source: RoomsSource;
   refresh: () => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 const USE_API_ROOMS = process.env.NEXT_PUBLIC_USE_API_ROOMS === "true";
 
-function coerceRoom(value: unknown): Room | null {
+function coerceRoom(value: unknown): RoomSummary | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
 
   const id = typeof record.id === "string" ? record.id : null;
   const name = typeof record.name === "string" ? record.name : null;
   const createdAtValue = record.createdAt;
-  const createdAt =
-    typeof createdAtValue === "string" || createdAtValue instanceof Date
-      ? new Date(createdAtValue)
-      : null;
+  const createdAt = typeof createdAtValue === "string" ? createdAtValue : null;
+  const createdAtMs =
+    typeof createdAt === "string" ? Date.parse(createdAt) : Number.NaN;
   const visibility =
     record.visibility === "public" || record.visibility === "private"
       ? record.visibility
@@ -56,6 +58,7 @@ function coerceRoom(value: unknown): Room | null {
     !id ||
     !name ||
     !createdAt ||
+    Number.isNaN(createdAtMs) ||
     !visibility ||
     !hostName ||
     participantsCurrent === null ||
@@ -84,7 +87,7 @@ async function fetchRoomsFromApi({
   signal,
 }: {
   signal: AbortSignal;
-}): Promise<Room[]> {
+}): Promise<RoomSummary[]> {
   const response = await fetch(`${API_BASE_URL}/api/rooms`, {
     method: "GET",
     credentials: "include",
@@ -104,17 +107,19 @@ async function fetchRoomsFromApi({
     throw new Error("Invalid rooms response");
   }
 
-  const rooms: Room[] = [];
+  const rooms: RoomSummary[] = [];
   for (const item of list) {
     const room = coerceRoom(item);
     if (room) rooms.push(room);
   }
 
-  return rooms.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return rooms.sort(
+    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+  );
 }
 
 export function useRooms(): RoomsResult {
-  const [rooms, setRooms] = useState<Room[]>(() => mockRoomsByCreatedAt);
+  const [rooms, setRooms] = useState<RoomSummary[]>(() => mockRoomsByCreatedAt);
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<RoomsSource>("mock");

@@ -16,6 +16,7 @@
     "@tunetalk/db": "workspace:*",
     "@tunetalk/shared": "workspace:*",
     "better-auth": "^1.4.7",
+    "drizzle-orm": "^0.45.1",
     "hono": "^4.4.5",
     "open-cli": "^8.0.0",
     "zod": "^4.2.1"

@@ -13,6 +13,8 @@ import {
   Users,
 } from "lucide-react";
 
+import type { RoomSummary } from "@tunetalk/shared";
+
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -22,11 +24,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { API_BASE_URL } from "@/lib/constants";
 import { cn } from "@/utils/cn";
 import { getInitials, normalizeText } from "@/utils/string-utils";
 
 import { mockRooms } from "../../discover/rooms-mock";
 import { getMockRoom, type RoomMessage } from "./room-mock";
+
+function toWebSocketUrl(baseUrl: string) {
+  if (baseUrl.startsWith("https://")) return `wss://${baseUrl.slice(8)}`;
+  if (baseUrl.startsWith("http://")) return `ws://${baseUrl.slice(7)}`;
+  return baseUrl;
+}
 
 function formatTime(seconds: number) {
   const mins = Math.floor(seconds / 60);
@@ -51,13 +60,25 @@ export default function RoomPage() {
     () => mockRooms.find((room) => room.id === roomId) ?? null,
     [roomId]
   );
-  const participantStats = roomSummary?.participants ?? null;
-  const roomName = roomSummary?.name ?? roomDetail.name;
-  const hostName = roomSummary?.host.name ?? roomDetail.hostName;
+
+  const [apiRoom, setApiRoom] = useState<RoomSummary | null>(null);
+  const hasSeenRoomRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  const participantStats =
+    apiRoom?.participants ?? roomSummary?.participants ?? null;
+  const roomName = apiRoom?.name ?? roomSummary?.name ?? roomDetail.name;
+  const hostName =
+    apiRoom?.host.name ?? roomSummary?.host.name ?? roomDetail.hostName;
   const nowPlayingTitle =
-    roomSummary?.nowPlaying.title ?? roomDetail.currentTrack.title;
+    apiRoom?.nowPlaying.title ??
+    roomSummary?.nowPlaying.title ??
+    roomDetail.currentTrack.title;
   const nowPlayingArtist =
-    roomSummary?.nowPlaying.artist ?? roomDetail.currentTrack.artist;
+    apiRoom?.nowPlaying.artist ??
+    roomSummary?.nowPlaying.artist ??
+    roomDetail.currentTrack.artist;
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [query, setQuery] = useState("");
@@ -100,9 +121,133 @@ export default function RoomPage() {
     setIsPlaying((current) => !current);
   }, []);
 
-  const handleLeave = useCallback(() => {
-    router.push("/discover");
-  }, [router]);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!roomId || roomId === "unknown") return;
+
+    let cancelled = false;
+
+    void fetch(`${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}`, {
+      method: "GET",
+      credentials: "include",
+    })
+      .then(async (response) => {
+        if (cancelled) return;
+
+        if (response.status === 404) {
+          router.replace(
+            hasSeenRoomRef.current
+              ? "/discover?toast=disbanded"
+              : "/discover?toast=room_not_found"
+          );
+          return;
+        }
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+
+        const record = payload as Partial<RoomSummary>;
+        if (!record.id || !record.name || !record.host?.name) {
+          return;
+        }
+
+        hasSeenRoomRef.current = true;
+        setApiRoom(record as RoomSummary);
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, router]);
+
+  useEffect(() => {
+    if (!roomId || roomId === "unknown") return;
+
+    const url = `${toWebSocketUrl(API_BASE_URL)}/api/rooms/${encodeURIComponent(roomId)}/ws`;
+    const ws = new WebSocket(url);
+
+    ws.addEventListener("message", (event) => {
+      if (typeof event.data !== "string") return;
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      if (!payload || typeof payload !== "object") return;
+      const type = (payload as { type?: unknown }).type;
+      const eventRoomId = (payload as { roomId?: unknown }).roomId;
+
+      if (type === "ping") {
+        ws.send("pong");
+        return;
+      }
+
+      if (type === "room_disbanded" && eventRoomId === roomId) {
+        router.replace("/discover?toast=disbanded");
+      }
+    });
+
+    return () => {
+      ws.close();
+    };
+  }, [roomId, router]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    if (!roomId || roomId === "unknown") return;
+    // Presence is handled via WebSockets; no DB membership needed for public rooms.
+  }, [roomId, session?.user?.id]);
+
+  const handleLeave = useCallback(async () => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+
+    try {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/leave`,
+        {
+          method: "POST",
+          credentials: "include",
+          signal: controller.signal,
+        }
+      );
+
+      window.clearTimeout(timeout);
+
+      const payload: unknown = await response.json().catch(() => null);
+      const disbanded =
+        payload &&
+        typeof payload === "object" &&
+        (payload as { disbanded?: unknown }).disbanded === true;
+
+      router.replace(disbanded ? "/discover?toast=disbanded" : "/discover");
+    } catch {
+      router.replace("/discover");
+    } finally {
+      if (isMountedRef.current) setIsLeaving(false);
+    }
+  }, [isLeaving, roomId, router]);
 
   const handleSend = useCallback(() => {
     const text = messageDraft.trim();
@@ -246,11 +391,12 @@ export default function RoomPage() {
                   <div className="mt-auto pt-4">
                     <Button
                       type="button"
-                      onClick={handleLeave}
+                      onClick={() => void handleLeave()}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full border-transparent"
+                      disabled={isLeaving}
                     >
                       <LogOut className="h-4 w-4" aria-hidden="true" />
-                      Leave
+                      {isLeaving ? "Leaving..." : "Leave"}
                     </Button>
                   </div>
                 </CardContent>
