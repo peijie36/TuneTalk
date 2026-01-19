@@ -1,7 +1,7 @@
 import { db } from "@tunetalk/db";
 import * as schema from "@tunetalk/db/schema";
 import type { RoomSummary } from "@tunetalk/shared";
-import { DEFAULT_ROOM_CAPACITY } from "@tunetalk/shared";
+import { DEFAULT_ROOM_CAPACITY } from "@tunetalk/shared/rooms";
 import { eq, ilike } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
