@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
 
-import type { Room } from "./rooms-mock";
+import type { RoomSummary } from "@tunetalk/shared";
 
 export interface RoomRowProps {
-  room: Room;
+  room: RoomSummary;
   isSelected: boolean;
   onSelect: (roomId: string) => void;
   onJoin: (roomId: string) => void;
