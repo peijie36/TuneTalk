@@ -1,24 +1,6 @@
 import type { RoomRow } from "@tunetalk/db/schema";
-
-export type RoomVisibility = "public" | "private";
-
-export interface Room {
-  id: string;
-  name: string;
-  createdAt: Date;
-  host: {
-    name: string;
-  };
-  visibility: RoomVisibility;
-  participants: {
-    current: number;
-    capacity: number;
-  };
-  nowPlaying: {
-    title: string;
-    artist: string;
-  };
-}
+import type { RoomSummary } from "@tunetalk/shared";
+import { DEFAULT_ROOM_CAPACITY } from "@tunetalk/shared/rooms";
 
 const dbRoomSeed: RoomRow[] = [
   {
@@ -106,7 +88,7 @@ const userDirectory: Record<string, { name: string }> = {
   user_jay: { name: "Jay Patel" },
 };
 
-function visibilityFromRoomSeed(seed: RoomRow): RoomVisibility {
+function visibilityFromRoomSeed(seed: RoomRow) {
   return seed.isPublic ? "public" : "private";
 }
 
@@ -117,59 +99,62 @@ function findSeed(roomId: string) {
 function makeRoom(
   roomId: string,
   details: {
-    participants: { current: number; capacity: number };
+    participants: { current: number };
     nowPlaying: { title: string; artist: string };
   }
-): Room {
+): RoomSummary {
   const seed = findSeed(roomId);
   if (!seed) throw new Error(`Missing mock room seed for ${roomId}`);
 
   return {
     id: seed.id,
     name: seed.name,
-    createdAt: seed.createdAt,
+    createdAt: seed.createdAt.toISOString(),
     host: userDirectory[seed.createdByUserId],
     visibility: visibilityFromRoomSeed(seed),
-    participants: details.participants,
+    participants: {
+      current: details.participants.current,
+      capacity: DEFAULT_ROOM_CAPACITY,
+    },
     nowPlaying: details.nowPlaying,
   };
 }
 
-export const mockRooms: Room[] = [
+export const mockRooms: RoomSummary[] = [
   makeRoom("room_kpop_comeback", {
-    participants: { current: 10, capacity: 14 },
+    participants: { current: 7 },
     nowPlaying: { title: "COMEBACK", artist: "ECHO" },
   }),
   makeRoom("room_pop_picks", {
-    participants: { current: 5, capacity: 15 },
+    participants: { current: 5 },
     nowPlaying: { title: "Gravity", artist: "Nova Lane" },
   }),
   makeRoom("room_rnb_after_hours", {
-    participants: { current: 6, capacity: 14 },
+    participants: { current: 6 },
     nowPlaying: { title: "Quiet Storm", artist: "Velvet Room" },
   }),
   makeRoom("room_lofi_chill", {
-    participants: { current: 7, capacity: 14 },
+    participants: { current: 7 },
     nowPlaying: { title: "Sunset Drive", artist: "Kairo" },
   }),
   makeRoom("room_private_vip", {
-    participants: { current: 10, capacity: 10 },
+    participants: { current: 10 },
     nowPlaying: { title: "No Signal", artist: "Midnight Club" },
   }),
   makeRoom("room_synthwave_night", {
-    participants: { current: 12, capacity: 14 },
+    participants: { current: 9 },
     nowPlaying: { title: "Neon Pulse", artist: "Arcadia" },
   }),
   makeRoom("room_indie_finds", {
-    participants: { current: 9, capacity: 14 },
+    participants: { current: 9 },
     nowPlaying: { title: "Paper Planes", artist: "Hollow Trees" },
   }),
   makeRoom("room_focus_mode", {
-    participants: { current: 3, capacity: 10 },
+    participants: { current: 3 },
     nowPlaying: { title: "Ambient Bloom", artist: "Lumen" },
   }),
 ];
 
-export const mockRoomsByCreatedAt: Room[] = [...mockRooms].sort(
-  (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+export const mockRoomsByCreatedAt: RoomSummary[] = [...mockRooms].sort(
+  (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
 );

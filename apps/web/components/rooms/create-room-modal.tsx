@@ -5,6 +5,20 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+interface CreateRoomModalProps {
+  open: boolean;
+  name: string;
+  isPublic: boolean;
+  password: string;
+  error: string | null;
+  isCreating: boolean;
+  onNameChange: (value: string) => void;
+  onIsPublicChange: (value: boolean) => void;
+  onPasswordChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
 export default function CreateRoomModal({
   open,
   name,
@@ -17,19 +31,7 @@ export default function CreateRoomModal({
   onPasswordChange,
   onCancel,
   onSubmit,
-}: {
-  open: boolean;
-  name: string;
-  isPublic: boolean;
-  password: string;
-  error: string | null;
-  isCreating: boolean;
-  onNameChange: (value: string) => void;
-  onIsPublicChange: (value: boolean) => void;
-  onPasswordChange: (value: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
+}: CreateRoomModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -42,17 +44,10 @@ export default function CreateRoomModal({
       onCancel();
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      onCancel();
-    };
-
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [onCancel, open]);
 

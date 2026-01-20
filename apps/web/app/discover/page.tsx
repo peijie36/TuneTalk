@@ -20,13 +20,13 @@ import CreateRoomModal from "@/components/rooms/create-room-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateRoom } from "@/hooks/use-create-room";
+import { useRooms } from "@/hooks/use-rooms";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
 import { normalizeText } from "@/utils/string-utils";
 
 import RoomRow from "./room-row";
 import ServerInfoPanel from "./server-info-panel";
-import { useRooms } from "./use-rooms";
 
 type RoomFilter = "all" | "public" | "private";
 

@@ -6,7 +6,7 @@ import type { RoomSummary } from "@tunetalk/shared";
 
 import { API_BASE_URL } from "@/lib/constants";
 
-import { mockRoomsByCreatedAt } from "./rooms-mock";
+import { mockRoomsByCreatedAt } from "@/app/discover/rooms-mock";
 
 type RoomsSource = "mock" | "api";
 
