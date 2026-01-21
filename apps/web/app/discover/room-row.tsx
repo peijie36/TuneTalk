@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, type MouseEvent } from "react";
 
 import { Lock, Users2 } from "lucide-react";
 
@@ -24,16 +24,6 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
     onSelect(room.id);
   }, [onSelect, room.id]);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        onSelect(room.id);
-      }
-    },
-    [onSelect, room.id]
-  );
-
   const handleJoinClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -45,7 +35,6 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
   return (
     <div
       onClick={handleSelect}
-      onKeyDown={handleKeyDown}
       className={cn(
         "group border-border/70 focus-visible:ring-ring focus-visible:ring-offset-background w-full cursor-pointer rounded-3xl border px-5 py-4 text-left shadow-sm backdrop-blur transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
         isSelected ? "bg-white/55" : "bg-white/88 hover:bg-white/75"

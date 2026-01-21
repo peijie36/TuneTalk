@@ -153,10 +153,10 @@ export default function DiscoverPage() {
     return filteredRooms.slice(start, start + ROOMS_PER_PAGE);
   }, [filteredRooms, pageIndex]);
 
-  const handleReset = useCallback(() => {
+  const handleReset = () => {
     setQuery("");
     setFilter("all");
-  }, []);
+  };
 
   const handleSelectRoom = useCallback((roomId: string) => {
     setSelectedRoomId(roomId);
@@ -177,12 +177,12 @@ export default function DiscoverPage() {
     [isSessionPending, router, session]
   );
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = () => {
     setPageIndex(0);
     refreshRooms();
-  }, [refreshRooms]);
+  };
 
-  const handleCreateClick = useCallback(() => {
+  const handleCreateClick = () => {
     if (isSessionPending) return;
     if (!session) {
       router.push(`/signin?callbackURL=${encodeURIComponent("/discover")}`);
@@ -190,26 +190,26 @@ export default function DiscoverPage() {
     }
 
     createRoom.openModal();
-  }, [createRoom, isSessionPending, router, session]);
+  };
 
-  const handleCreateSubmit = useCallback(async () => {
+  const handleCreateSubmit = async () => {
     if (!session || isSessionPending) return;
     const result = await createRoom.submit();
     if (result.ok) router.push(`/room/${result.id}`);
-  }, [createRoom, isSessionPending, router, session]);
+  };
 
-  const handleJoinSelected = useCallback(() => {
+  const handleJoinSelected = () => {
     if (!selectedRoom) return;
     handleJoinRoom(selectedRoom.id);
-  }, [handleJoinRoom, selectedRoom]);
+  };
 
-  const handlePrevPage = useCallback(() => {
+  const handlePrevPage = () => {
     setPageIndex((current) => Math.max(0, current - 1));
-  }, []);
+  };
 
-  const handleNextPage = useCallback(() => {
+  const handleNextPage = () => {
     setPageIndex((current) => Math.min(pageCount - 1, current + 1));
-  }, [pageCount]);
+  };
 
   return (
     <div className="bg-background relative min-h-screen">
