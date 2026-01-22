@@ -1,20 +1,20 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
 import {
-  ListMusic,
-  LogOut,
-  Pause,
-  Play,
-  Search,
-  Send,
-  Users,
-} from "lucide-react";
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import type { RoomSummary } from "@tunetalk/shared";
+import { LogOut, Send, Users } from "lucide-react";
 
+import type { RoomSummary } from "@tunetalk/shared/rooms";
+
+import { ApiError, getRoom } from "@/api/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -28,8 +28,25 @@ import { API_BASE_URL } from "@/lib/constants";
 import { cn } from "@/utils/cn";
 import { getInitials, normalizeText } from "@/utils/string-utils";
 
-import { mockRooms } from "../../discover/rooms-mock";
-import { getMockRoom, type RoomMessage } from "./room-mock";
+interface PresenceParticipant {
+  id: string;
+  name: string;
+  role: "host" | "member";
+}
+
+interface ChatEvent {
+  id: string;
+  sender: { id: string; name: string };
+  text: string;
+  createdAt: string;
+}
+
+type RoomWsEvent =
+  | { type: "ping" }
+  | { type: "pong" }
+  | { type: "room_disbanded"; roomId: string }
+  | { type: "presence"; roomId: string; participants: PresenceParticipant[] }
+  | ({ type: "chat"; roomId: string } & ChatEvent);
 
 function toWebSocketUrl(baseUrl: string) {
   if (baseUrl.startsWith("https://")) return `wss://${baseUrl.slice(8)}`;
@@ -37,89 +54,99 @@ function toWebSocketUrl(baseUrl: string) {
   return baseUrl;
 }
 
-function formatTime(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+function parseWsEvent(data: string): RoomWsEvent | null {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(data);
+  } catch {
+    return null;
+  }
+
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const type = record.type;
+
+  if (type === "ping" || type === "pong") return { type } as RoomWsEvent;
+
+  if (type === "room_disbanded" && typeof record.roomId === "string") {
+    return { type: "room_disbanded", roomId: record.roomId };
+  }
+
+  if (
+    type === "presence" &&
+    typeof record.roomId === "string" &&
+    Array.isArray(record.participants)
+  ) {
+    const participants: PresenceParticipant[] = [];
+    for (const item of record.participants) {
+      if (!item || typeof item !== "object") continue;
+      const p = item as Record<string, unknown>;
+      const id = typeof p.id === "string" ? p.id : null;
+      const name = typeof p.name === "string" ? p.name : null;
+      const role = p.role === "host" || p.role === "member" ? p.role : null;
+      if (id && name && role) participants.push({ id, name, role });
+    }
+
+    return { type: "presence", roomId: record.roomId, participants };
+  }
+
+  if (
+    type === "chat" &&
+    typeof record.roomId === "string" &&
+    typeof record.id === "string" &&
+    typeof record.text === "string" &&
+    typeof record.createdAt === "string" &&
+    record.sender &&
+    typeof record.sender === "object"
+  ) {
+    const sender = record.sender as Record<string, unknown>;
+    const senderId = typeof sender.id === "string" ? sender.id : null;
+    const senderName = typeof sender.name === "string" ? sender.name : null;
+    if (!senderId || !senderName) return null;
+
+    return {
+      type: "chat",
+      roomId: record.roomId,
+      id: record.id,
+      sender: { id: senderId, name: senderName },
+      text: record.text,
+      createdAt: record.createdAt,
+    };
+  }
+
+  return null;
 }
 
 export default function RoomPage() {
   const routeParams = useParams<{ roomId?: string | string[] }>();
-  const roomId =
-    typeof routeParams.roomId === "string"
+  const roomId = useMemo(() => {
+    return typeof routeParams.roomId === "string"
       ? routeParams.roomId
       : Array.isArray(routeParams.roomId)
         ? (routeParams.roomId[0] ?? "unknown")
         : "unknown";
+  }, [routeParams.roomId]);
 
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending: isSessionPending } =
+    authClient.useSession();
 
-  const roomDetail = useMemo(() => getMockRoom(roomId), [roomId]);
-  const roomSummary = useMemo(
-    () => mockRooms.find((room) => room.id === roomId) ?? null,
-    [roomId]
-  );
-
-  const [apiRoom, setApiRoom] = useState<RoomSummary | null>(null);
-  const hasSeenRoomRef = useRef(false);
-  const isMountedRef = useRef(true);
+  const [room, setRoom] = useState<RoomSummary | null>(null);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const isMountedRef = useRef(true);
+  const hasSeenRoomRef = useRef(false);
 
-  const participantStats =
-    apiRoom?.participants ?? roomSummary?.participants ?? null;
-  const roomName = apiRoom?.name ?? roomSummary?.name ?? roomDetail.name;
-  const hostName =
-    apiRoom?.host.name ?? roomSummary?.host.name ?? roomDetail.hostName;
-  const nowPlayingTitle =
-    apiRoom?.nowPlaying.title ??
-    roomSummary?.nowPlaying.title ??
-    roomDetail.currentTrack.title;
-  const nowPlayingArtist =
-    apiRoom?.nowPlaying.artist ??
-    roomSummary?.nowPlaying.artist ??
-    roomDetail.currentTrack.artist;
+  const [participantQuery, setParticipantQuery] = useState("");
+  const deferredParticipantQuery = useDeferredValue(participantQuery);
+  const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
 
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [query, setQuery] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
-  const [messages, setMessages] = useState<RoomMessage[]>(
-    () => roomDetail.messages
-  );
+  const [messages, setMessages] = useState<ChatEvent[]>([]);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const upNext = roomDetail.queue.at(0);
-
-  const participants = useMemo(() => {
-    const youLabel = session?.user.name ?? session?.user.email ?? "You";
-
-    return roomDetail.participants.map((participant) => {
-      if (participant.role === "host" && participant.name !== hostName) {
-        return { ...participant, name: hostName };
-      }
-      if (participant.isYou && participant.name !== youLabel) {
-        return { ...participant, name: youLabel };
-      }
-      return participant;
-    });
-  }, [
-    hostName,
-    roomDetail.participants,
-    session?.user.email,
-    session?.user.name,
-  ]);
-
-  const filteredParticipants = useMemo(() => {
-    const q = normalizeText(query);
-    if (!q) return participants;
-    return participants.filter((participant) =>
-      normalizeText(participant.name).includes(q)
-    );
-  }, [participants, query]);
-
-  const handleTogglePlayback = useCallback(() => {
-    setIsPlaying((current) => !current);
-  }, []);
+  const sessionUserId = session?.user?.id ?? null;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -132,42 +159,36 @@ export default function RoomPage() {
     if (!roomId || roomId === "unknown") return;
 
     let cancelled = false;
+    setIsLoadingRoom(true);
 
-    void fetch(`${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}`, {
-      method: "GET",
-      credentials: "include",
-    })
-      .then(async (response) => {
+    void getRoom(roomId)
+      .then((nextRoom) => {
         if (cancelled) return;
-
-        if (response.status === 404) {
-          router.replace(
-            hasSeenRoomRef.current
-              ? "/discover?toast=disbanded"
-              : "/discover?toast=room_not_found"
-          );
-          return;
-        }
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload: unknown = await response.json().catch(() => null);
-        if (!payload || typeof payload !== "object") {
-          return;
-        }
-
-        const record = payload as Partial<RoomSummary>;
-        if (!record.id || !record.name || !record.host?.name) {
-          return;
-        }
-
         hasSeenRoomRef.current = true;
-        setApiRoom(record as RoomSummary);
+        setRoom(nextRoom);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
+
+        if (error instanceof ApiError) {
+          if (error.status === 404) {
+            router.replace(
+              hasSeenRoomRef.current
+                ? "/discover?toast=disbanded"
+                : "/discover?toast=room_not_found"
+            );
+            return;
+          }
+
+          if (error.status === 401 || error.status === 403) {
+            router.replace("/discover?toast=password_required");
+            return;
+          }
+        }
+      })
+      .finally(() => {
+        if (cancelled) return;
+        if (isMountedRef.current) setIsLoadingRoom(false);
       });
 
     return () => {
@@ -177,44 +198,69 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!roomId || roomId === "unknown") return;
+    if (!sessionUserId) return;
 
     const url = `${toWebSocketUrl(API_BASE_URL)}/api/rooms/${encodeURIComponent(roomId)}/ws`;
     const ws = new WebSocket(url);
+    wsRef.current = ws;
 
     ws.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
 
-      let payload: unknown;
-      try {
-        payload = JSON.parse(event.data);
-      } catch {
-        return;
-      }
+      const parsed = parseWsEvent(event.data);
+      if (!parsed) return;
 
-      if (!payload || typeof payload !== "object") return;
-      const type = (payload as { type?: unknown }).type;
-      const eventRoomId = (payload as { roomId?: unknown }).roomId;
-
-      if (type === "ping") {
+      if (parsed.type === "ping") {
         ws.send("pong");
         return;
       }
 
-      if (type === "room_disbanded" && eventRoomId === roomId) {
+      if (parsed.type === "room_disbanded" && parsed.roomId === roomId) {
         router.replace("/discover?toast=disbanded");
+        return;
+      }
+
+      if (parsed.type === "presence" && parsed.roomId === roomId) {
+        setParticipants(parsed.participants);
+        return;
+      }
+
+      if (parsed.type === "chat" && parsed.roomId === roomId) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: parsed.id,
+            sender: parsed.sender,
+            text: parsed.text,
+            createdAt: parsed.createdAt,
+          },
+        ]);
       }
     });
 
+    ws.addEventListener("close", () => {
+      if (wsRef.current === ws) wsRef.current = null;
+    });
+
     return () => {
+      if (wsRef.current === ws) wsRef.current = null;
       ws.close();
     };
-  }, [roomId, router]);
+  }, [roomId, router, sessionUserId]);
 
   useEffect(() => {
-    if (!session?.user?.id) return;
-    if (!roomId || roomId === "unknown") return;
-    // Presence is handled via WebSockets; no DB membership needed for public rooms.
-  }, [roomId, session?.user?.id]);
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages.length]);
+
+  const filteredParticipants = useMemo(() => {
+    const q = normalizeText(deferredParticipantQuery);
+    if (!q) return participants;
+    return participants.filter((participant) =>
+      normalizeText(participant.name).includes(q)
+    );
+  }, [deferredParticipantQuery, participants]);
 
   const handleLeave = useCallback(async () => {
     if (isLeaving) return;
@@ -252,18 +298,11 @@ export default function RoomPage() {
   const handleSend = useCallback(() => {
     const text = messageDraft.trim();
     if (!text) return;
+    if (!wsRef.current) return;
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: `m_${Date.now()}`,
-        sender: session?.user.name ?? "You",
-        text,
-        isYou: true,
-      },
-    ]);
+    wsRef.current.send(JSON.stringify({ type: "chat", text }));
     setMessageDraft("");
-  }, [messageDraft, session?.user.name]);
+  }, [messageDraft]);
 
   const handleMessageKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -274,11 +313,15 @@ export default function RoomPage() {
     [handleSend]
   );
 
-  useEffect(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+  const roomName = room?.name ?? "Room";
+  const hostName = room?.host.name ?? "Unknown";
+  const visibility = room?.visibility ?? "public";
+  const participantStats = room?.participants ?? null;
+  const participantCurrent = sessionUserId
+    ? participants.length
+    : (participantStats?.current ?? null);
+  const participantCapacity = participantStats?.capacity ?? null;
+  const nowPlaying = room?.nowPlaying ?? null;
 
   return (
     <div className="bg-background relative min-h-screen">
@@ -289,19 +332,13 @@ export default function RoomPage() {
           <label htmlFor="participant-search" className="sr-only">
             Search participants
           </label>
-          <div className="relative">
-            <Search
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2"
-              aria-hidden="true"
-            />
-            <Input
-              id="participant-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search participants..."
-              className="h-12 rounded-full bg-white/75 pr-4 pl-11 shadow-sm backdrop-blur"
-            />
-          </div>
+          <Input
+            id="participant-search"
+            value={participantQuery}
+            onChange={(event) => setParticipantQuery(event.target.value)}
+            placeholder="Search participants..."
+            className="h-12 rounded-full bg-white/75 px-5 shadow-sm backdrop-blur"
+          />
         </div>
 
         <PrimaryNav className="order-2 sm:absolute sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2" />
@@ -317,7 +354,7 @@ export default function RoomPage() {
           className="rounded-[34px] bg-black/55 p-6 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur sm:p-8 lg:h-[calc(100dvh-8.5rem)] lg:overflow-hidden lg:p-10"
         >
           <div className="grid gap-8 lg:h-full lg:min-h-0 lg:grid-cols-[340px_1fr] lg:items-start">
-            <div className="space-y-6">
+            <div className="space-y-6 lg:min-h-0">
               <Card className="bg-surface/80 border-border/70 flex flex-col rounded-[28px] border shadow-sm backdrop-blur">
                 <CardHeader className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
@@ -326,153 +363,116 @@ export default function RoomPage() {
                     </CardTitle>
                     <Badge
                       variant="outline"
-                      className={cn(
-                        "flex items-center gap-2",
-                        roomDetail.isLive ? "" : "opacity-70"
-                      )}
+                      className="bg-white/60 backdrop-blur"
                     >
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full",
-                          roomDetail.isLive
-                            ? "bg-accent-warm"
-                            : "bg-muted-foreground"
-                        )}
-                        aria-hidden="true"
-                      />
-                      {roomDetail.isLive ? "Live" : "Offline"}
+                      {visibility === "private" ? "Private" : "Public"}
                     </Badge>
                   </div>
+
                   <div className="text-muted-foreground flex items-center gap-2 text-xs font-semibold">
                     <Users className="h-4 w-4" aria-hidden="true" />
-                    {participantStats
-                      ? `${participantStats.current}/${participantStats.capacity} participants`
-                      : `${participants.length} participants`}
+                    {participantCapacity !== null && participantCurrent !== null
+                      ? `${participantCurrent}/${participantCapacity} participants`
+                      : "-"}
+                  </div>
+
+                  <div className="text-muted-foreground text-xs">
+                    {isLoadingRoom ? "Loading room..." : `Host: ${hostName}`}
                   </div>
                 </CardHeader>
-                <CardContent className="flex flex-1 flex-col gap-4">
-                  <div className="space-y-3">
-                    {filteredParticipants.map((participant) => (
-                      <div
-                        key={participant.id}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <Avatar className="h-10 w-10 border border-white/60">
-                            <AvatarFallback>
-                              {getInitials(participant.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <div className="text-text-strong truncate text-sm font-semibold">
-                              {participant.name}
-                            </div>
-                            <div className="text-muted-foreground text-xs">
-                              {participant.role === "host"
-                                ? "host"
-                                : "listener"}
-                            </div>
-                          </div>
-                        </div>
-
-                        {participant.role === "host" ? (
-                          <Badge variant="subtle" className="shrink-0">
-                            Host
-                          </Badge>
-                        ) : participant.isYou ? (
-                          <Badge variant="subtle" className="shrink-0">
-                            You
-                          </Badge>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-auto pt-4">
-                    <Button
-                      type="button"
-                      onClick={() => void handleLeave()}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full border-transparent"
-                      disabled={isLeaving}
-                    >
-                      <LogOut className="h-4 w-4" aria-hidden="true" />
-                      {isLeaving ? "Leaving..." : "Leave"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 rounded-[22px] border bg-white/70 shadow-sm backdrop-blur">
-                <CardContent className="flex items-center justify-between gap-3 py-4">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="bg-primary-muted text-primary flex h-10 w-10 items-center justify-center rounded-full">
-                      <ListMusic className="h-5 w-5" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+                  <div className="border-border/70 min-h-0 flex-1 overflow-hidden rounded-2xl border bg-white/80 shadow-inner">
+                    <div className="border-border/70 border-b px-4 py-3">
                       <div className="text-text-strong text-sm font-semibold">
-                        Up next
+                        Participants
                       </div>
-                      <div className="text-muted-foreground truncate text-xs">
-                        {upNext ? `${upNext.title} — ${upNext.artist}` : "—"}
+                      <div className="text-muted-foreground text-xs">
+                        {sessionUserId
+                          ? "Online participants in this room"
+                          : "Sign in to see online participants"}
                       </div>
                     </div>
+                    <div className="max-h-[360px] overflow-y-auto px-4 py-3">
+                      {!sessionUserId ? (
+                        <div className="text-muted-foreground text-sm">
+                          Sign in to connect to presence.
+                        </div>
+                      ) : filteredParticipants.length === 0 ? (
+                        <div className="text-muted-foreground text-sm">
+                          No participants yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {filteredParticipants.map((participant) => {
+                            const isYou = participant.id === sessionUserId;
+                            return (
+                              <div
+                                key={participant.id}
+                                className="flex items-center justify-between gap-3"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <Avatar className="h-9 w-9 border border-white/60">
+                                    <AvatarFallback>
+                                      {getInitials(participant.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="text-text-strong truncate text-sm font-semibold">
+                                      {isYou ? "You" : participant.name}
+                                    </div>
+                                    <div className="text-muted-foreground text-xs">
+                                      {participant.role}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {participant.role === "host" ? (
+                                  <Badge variant="subtle" className="shrink-0">
+                                    Host
+                                  </Badge>
+                                ) : isYou ? (
+                                  <Badge variant="subtle" className="shrink-0">
+                                    You
+                                  </Badge>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="secondary" size="sm" className="h-10 px-5">
-                    Queue
+
+                  <Button
+                    type="button"
+                    onClick={() => void handleLeave()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full border-transparent"
+                    disabled={isLeaving || isSessionPending || !sessionUserId}
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    {isLeaving ? "Leaving..." : "Leave"}
                   </Button>
                 </CardContent>
               </Card>
             </div>
 
             <div className="space-y-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-              <Card className="border-border/70 shrink-0 overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
-                  <div className="min-w-0 space-y-1">
-                    <div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                      Now playing
-                    </div>
-                    <div className="text-text-strong truncate text-base font-semibold">
-                      {nowPlayingTitle}
-                    </div>
-                    <div className="text-muted-foreground truncate text-sm">
-                      {nowPlayingArtist}
-                    </div>
+              <Card className="border-border/70 shrink-0 rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
+                <CardHeader className="space-y-1">
+                  <div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                    Now playing
                   </div>
-
-                  <Button
-                    type="button"
-                    size="icon"
-                    onClick={handleTogglePlayback}
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    className="shrink-0"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-4 w-4" aria-hidden="true" />
-                    ) : (
-                      <Play className="h-4 w-4" aria-hidden="true" />
-                    )}
-                  </Button>
+                  <CardTitle className="text-text-strong truncate text-base font-semibold">
+                    {nowPlaying ? nowPlaying.title : "-"}
+                  </CardTitle>
+                  <div className="text-muted-foreground truncate text-sm">
+                    {nowPlaying ? nowPlaying.artist : "-"}
+                  </div>
                 </CardHeader>
-
-                <CardContent className="space-y-4 pt-0">
-                  <div className="bg-foreground/10 h-[84px] rounded-2xl" />
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-muted-foreground">0:58</span>
-                      <span className="text-muted-foreground">
-                        {formatTime(roomDetail.currentTrack.durationSeconds)}
-                      </span>
-                    </div>
-                    <div className="bg-border h-2 w-full rounded-full">
-                      <div className="bg-primary h-2 w-[42%] rounded-full" />
-                    </div>
-                  </div>
-                </CardContent>
               </Card>
 
-              <Card className="border-border/70 flex min-h-[420px] flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur lg:min-h-0 lg:flex-1">
-                <CardHeader className="pb-4">
+              <Card className="border-border/70 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
+                <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
                   <CardTitle className="text-text-strong text-base font-semibold">
                     Chat
                   </CardTitle>
@@ -480,74 +480,90 @@ export default function RoomPage() {
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-0">
                   <div
                     ref={chatScrollRef}
-                    className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl bg-white/60 p-4"
+                    className="border-border/70 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border bg-white/80 p-4 shadow-inner"
                   >
-                    {messages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={cn(
-                          "flex gap-3",
-                          message.isYou ? "justify-end" : "justify-start"
-                        )}
-                      >
-                        {message.isYou ? null : (
-                          <Avatar className="h-9 w-9 border border-white/60">
-                            <AvatarFallback>
-                              {getInitials(message.sender)}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-
-                        <div
-                          className={cn(
-                            "max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm",
-                            message.isYou
-                              ? "bg-primary text-white"
-                              : "text-text-strong bg-white"
-                          )}
-                        >
-                          {message.isYou ? null : (
-                            <div className="text-xs font-semibold opacity-70">
-                              {message.sender}
-                            </div>
-                          )}
-                          <div>{message.text}</div>
-                        </div>
-
-                        {message.isYou ? (
-                          <Avatar className="h-9 w-9 border border-white/60">
-                            <AvatarFallback>
-                              {getInitials(session?.user.name ?? "You")}
-                            </AvatarFallback>
-                          </Avatar>
-                        ) : null}
+                    {!sessionUserId ? (
+                      <div className="text-muted-foreground text-sm">
+                        Sign in to chat.
                       </div>
-                    ))}
+                    ) : messages.length === 0 ? (
+                      <div className="text-muted-foreground text-sm">
+                        No messages yet. Say hello!
+                      </div>
+                    ) : (
+                      messages.map((message) => {
+                        const isYou = message.sender.id === sessionUserId;
+                        const avatarLabel = isYou
+                          ? (session?.user?.name ??
+                            session?.user?.email ??
+                            "You")
+                          : message.sender.name;
+                        return (
+                          <div
+                            key={message.id}
+                            className={cn(
+                              "flex w-full items-end gap-2",
+                              isYou ? "justify-end" : "justify-start"
+                            )}
+                          >
+                            {!isYou ? (
+                              <Avatar className="h-9 w-9 border border-white/60">
+                                <AvatarFallback>
+                                  {getInitials(avatarLabel)}
+                                </AvatarFallback>
+                              </Avatar>
+                            ) : null}
+
+                            <div
+                              className={cn(
+                                "flex max-w-[78%] flex-col gap-1 sm:max-w-[70%]",
+                                isYou ? "items-end text-right" : "items-start"
+                              )}
+                            >
+                              <div className="text-muted-foreground px-1 text-xs font-semibold">
+                                {isYou ? "You" : message.sender.name}
+                              </div>
+                              <div
+                                className={cn(
+                                  "rounded-2xl px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm",
+                                  isYou
+                                    ? "bg-primary text-primary-foreground rounded-br-md"
+                                    : "bg-muted/70 text-text-strong rounded-bl-md"
+                                )}
+                              >
+                                {message.text}
+                              </div>
+                            </div>
+
+                            {isYou ? (
+                              <Avatar className="h-9 w-9 border border-white/60">
+                                <AvatarFallback>
+                                  {getInitials(avatarLabel)}
+                                </AvatarFallback>
+                              </Avatar>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
 
-                  <div className="flex items-end gap-3">
-                    <Avatar className="h-10 w-10 border border-white/60">
-                      <AvatarFallback>
-                        {getInitials(session?.user.name ?? "You")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <Input
-                        value={messageDraft}
-                        onChange={(event) =>
-                          setMessageDraft(event.target.value)
-                        }
-                        onKeyDown={handleMessageKeyDown}
-                        placeholder="Text Box"
-                        className="h-12 rounded-full bg-white/80 px-5 shadow-sm"
-                      />
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={messageDraft}
+                      onChange={(event) => setMessageDraft(event.target.value)}
+                      onKeyDown={handleMessageKeyDown}
+                      placeholder={
+                        sessionUserId ? "Send a message..." : "Sign in to chat"
+                      }
+                      className="h-12 rounded-full bg-white/90 shadow-sm backdrop-blur"
+                      disabled={!sessionUserId}
+                    />
                     <Button
                       type="button"
-                      size="icon"
+                      className="h-12 w-12 rounded-full"
                       onClick={handleSend}
-                      aria-label="Send message"
-                      disabled={!messageDraft.trim()}
+                      disabled={!sessionUserId || !messageDraft.trim()}
                     >
                       <Send className="h-4 w-4" aria-hidden="true" />
                     </Button>

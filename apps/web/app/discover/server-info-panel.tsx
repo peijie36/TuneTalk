@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { RoomSummary } from "@tunetalk/shared";
+import type { RoomSummary } from "@tunetalk/shared/rooms";
 
 export default function ServerInfoPanel({
   selectedRoom,

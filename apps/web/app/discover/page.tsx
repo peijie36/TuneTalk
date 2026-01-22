@@ -11,15 +11,17 @@ import {
 
 import { RefreshCcw, Search } from "lucide-react";
 
-import type { RoomSummary } from "@tunetalk/shared";
+import type { RoomSummary } from "@tunetalk/shared/rooms";
 
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
 import CreateRoomModal from "@/components/rooms/create-room-modal";
+import JoinPrivateRoomModal from "@/components/rooms/join-private-room-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateRoom } from "@/hooks/use-create-room";
+import { useJoinRoom } from "@/hooks/use-join-room";
 import { useRooms } from "@/hooks/use-rooms";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
@@ -58,6 +60,24 @@ export default function DiscoverPage() {
   const [pageIndex, setPageIndex] = useState(0);
   const createRoom = useCreateRoom();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const joinRoom = useJoinRoom();
+  const [joinModalRoomId, setJoinModalRoomId] = useState<string | null>(null);
+  const [joinModalRoomName, setJoinModalRoomName] = useState("");
+  const [joinPassword, setJoinPassword] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const closeJoinModal = useCallback(() => {
+    setJoinModalRoomId(null);
+    setJoinModalRoomName("");
+    setJoinPassword("");
+    setJoinError(null);
+  }, []);
+
+  const handleJoinPasswordChange = useCallback((value: string) => {
+    setJoinPassword(value);
+    setJoinError(null);
+  }, []);
 
   useEffect(() => {
     const firstRoomId = rooms.at(0)?.id ?? "";
@@ -132,6 +152,8 @@ export default function DiscoverPage() {
       setToastMessage("The host disbanded the room.");
     } else if (toast === "room_not_found") {
       setToastMessage("That room no longer exists.");
+    } else if (toast === "password_required") {
+      setToastMessage("This room is private. Enter the password to join.");
     }
 
     window.history.replaceState(null, "", "/discover");
@@ -171,11 +193,65 @@ export default function DiscoverPage() {
         );
         return;
       }
+
       setSelectedRoomId(roomId);
-      router.push(`/room/${roomId}`);
+
+      void (async () => {
+        const result = await joinRoom.attemptJoin(roomId);
+        if (!result.ok) {
+          if (result.requiresPassword) {
+            const name =
+              rooms.find((room) => room.id === roomId)?.name ?? "Room";
+            setJoinModalRoomId(roomId);
+            setJoinModalRoomName(name);
+            setJoinPassword("");
+            setJoinError(null);
+            return;
+          }
+
+          setToastMessage(result.error);
+          return;
+        }
+
+        router.push(`/room/${roomId}`);
+      })();
     },
-    [isSessionPending, router, session]
+    [isSessionPending, joinRoom, rooms, router, session]
   );
+
+  const handleJoinWithPassword = useCallback(() => {
+    if (!joinModalRoomId) return;
+    if (isSessionPending) return;
+    if (!session) return;
+
+    void (async () => {
+      const passwordTrimmed = joinPassword.trim();
+      if (passwordTrimmed.length < 8) {
+        setJoinError("Password must be at least 8 characters.");
+        return;
+      }
+
+      const result = await joinRoom.attemptJoin(
+        joinModalRoomId,
+        passwordTrimmed
+      );
+      if (!result.ok) {
+        setJoinError(result.error);
+        return;
+      }
+
+      closeJoinModal();
+      router.push(`/room/${joinModalRoomId}`);
+    })();
+  }, [
+    closeJoinModal,
+    isSessionPending,
+    joinModalRoomId,
+    joinPassword,
+    joinRoom,
+    router,
+    session,
+  ]);
 
   const handleRefresh = () => {
     setPageIndex(0);
@@ -439,6 +515,17 @@ export default function DiscoverPage() {
         onPasswordChange={createRoom.setPassword}
         onCancel={createRoom.closeModal}
         onSubmit={() => void handleCreateSubmit()}
+      />
+
+      <JoinPrivateRoomModal
+        open={joinModalRoomId !== null}
+        roomName={joinModalRoomName}
+        password={joinPassword}
+        error={joinError}
+        isJoining={joinRoom.isJoining}
+        onPasswordChange={handleJoinPasswordChange}
+        onCancel={closeJoinModal}
+        onSubmit={handleJoinWithPassword}
       />
     </div>
   );

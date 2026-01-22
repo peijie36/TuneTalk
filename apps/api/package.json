@@ -15,6 +15,7 @@
     "@hono/node-ws": "^1.0.3",
     "@tunetalk/db": "workspace:*",
     "@tunetalk/shared": "workspace:*",
+    "argon2": "^0.44.0",
     "better-auth": "^1.4.7",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.4.5",

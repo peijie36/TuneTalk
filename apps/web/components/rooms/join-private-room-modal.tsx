@@ -5,37 +5,30 @@ import { useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-interface CreateRoomModalProps {
+interface JoinPrivateRoomModalProps {
   open: boolean;
-  name: string;
-  isPublic: boolean;
+  roomName: string;
   password: string;
   error: string | null;
-  isCreating: boolean;
-  onNameChange: (value: string) => void;
-  onIsPublicChange: (value: boolean) => void;
+  isJoining: boolean;
   onPasswordChange: (value: string) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
 
-export default function CreateRoomModal({
+export default function JoinPrivateRoomModal({
   open,
-  name,
-  isPublic,
+  roomName,
   password,
   error,
-  isCreating,
-  onNameChange,
-  onIsPublicChange,
+  isJoining,
   onPasswordChange,
   onCancel,
   onSubmit,
-}: CreateRoomModalProps) {
+}: JoinPrivateRoomModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
-  const canSubmit =
-    !isCreating && !!name.trim() && (isPublic || password.trim().length >= 8);
+  const canSubmit = password.trim().length >= 8 && !isJoining;
 
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -71,7 +64,7 @@ export default function CreateRoomModal({
       className="fixed inset-0 z-50 flex items-center justify-center px-4 py-10"
       role="dialog"
       aria-modal="true"
-      aria-label="Create room"
+      aria-label="Join private room"
     >
       <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
       <div
@@ -82,10 +75,10 @@ export default function CreateRoomModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-text-strong text-lg font-semibold">
-                Create a room
+                Join {roomName}
               </p>
               <p className="text-muted-foreground text-sm">
-                Configure your room and invite listeners.
+                This room is private. Enter the password to join.
               </p>
             </div>
             <Button
@@ -93,7 +86,7 @@ export default function CreateRoomModal({
               variant="ghost"
               size="sm"
               onClick={onCancel}
-              disabled={isCreating}
+              disabled={isJoining}
             >
               Close
             </Button>
@@ -101,76 +94,23 @@ export default function CreateRoomModal({
 
           <div className="space-y-2">
             <label
-              htmlFor="create-room-name"
+              htmlFor="join-room-password"
               className="text-text-strong text-sm font-medium"
             >
-              Name
+              Password
             </label>
             <Input
-              id="create-room-name"
-              value={name}
-              onChange={(event) => onNameChange(event.target.value)}
+              id="join-room-password"
+              value={password}
+              onChange={(event) => onPasswordChange(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              disabled={isCreating}
-              maxLength={60}
+              disabled={isJoining}
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter password"
               autoFocus
             />
           </div>
-
-          <div className="space-y-2">
-            <div className="text-text-strong text-sm font-medium">
-              Visibility
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={isPublic ? "default" : "secondary"}
-                onClick={() => onIsPublicChange(true)}
-                disabled={isCreating}
-              >
-                Public
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={!isPublic ? "default" : "secondary"}
-                onClick={() => onIsPublicChange(false)}
-                disabled={isCreating}
-              >
-                Private
-              </Button>
-            </div>
-            {!isPublic ? (
-              <p className="text-muted-foreground text-sm">
-                Private rooms require a password to join.
-              </p>
-            ) : null}
-          </div>
-
-          {!isPublic ? (
-            <div className="space-y-2">
-              <label
-                htmlFor="create-room-password"
-                className="text-text-strong text-sm font-medium"
-              >
-                Password
-              </label>
-              <Input
-                id="create-room-password"
-                value={password}
-                onChange={(event) => onPasswordChange(event.target.value)}
-                onKeyDown={handleInputKeyDown}
-                disabled={isCreating}
-                type="password"
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-              />
-              <p className="text-muted-foreground text-xs">
-                Required for private rooms (min 8 characters).
-              </p>
-            </div>
-          ) : null}
 
           {error ? (
             <p className="text-destructive text-sm font-medium">{error}</p>
@@ -181,12 +121,12 @@ export default function CreateRoomModal({
               type="button"
               variant="secondary"
               onClick={onCancel}
-              disabled={isCreating}
+              disabled={isJoining}
             >
               Cancel
             </Button>
             <Button type="button" onClick={onSubmit} disabled={!canSubmit}>
-              {isCreating ? "Creating..." : "Create room"}
+              {isJoining ? "Joining..." : "Join room"}
             </Button>
           </div>
         </div>

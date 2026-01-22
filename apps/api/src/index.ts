@@ -1,5 +1,8 @@
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
+import { db } from "@tunetalk/db";
+import * as schema from "@tunetalk/db/schema";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -64,10 +67,57 @@ app.get(
   "/api/rooms/:roomId/ws",
   nodeWebSocket.upgradeWebSocket((c) => {
     const roomId = c.req.param("roomId");
+    const user = c.get("user") as HonoAuthVariables["Variables"]["user"];
 
     return {
       onOpen: (_event, ws) => {
-        addRoomConnection(roomId, ws);
+        if (!user) {
+          ws.close(1008, "Unauthorized");
+          return;
+        }
+
+        void (async () => {
+          const roomRow = await db
+            .select({
+              isPublic: schema.room.isPublic,
+              createdByUserId: schema.room.createdByUserId,
+            })
+            .from(schema.room)
+            .where(eq(schema.room.id, roomId))
+            .limit(1);
+
+          const room = roomRow.at(0);
+          if (!room) {
+            ws.close(1008, "Room not found");
+            return;
+          }
+
+          if (!room.isPublic) {
+            const membership = await db
+              .select({ roomId: schema.roomMember.roomId })
+              .from(schema.roomMember)
+              .where(
+                and(
+                  eq(schema.roomMember.roomId, roomId),
+                  eq(schema.roomMember.userId, user.id)
+                )
+              )
+              .limit(1);
+
+            if (membership.length === 0) {
+              ws.close(1008, "Forbidden");
+              return;
+            }
+          }
+
+          const name =
+            user.name?.trim() || user.email?.trim() || `user_${user.id}`;
+          addRoomConnection(roomId, ws, {
+            id: user.id,
+            name,
+            role: room.createdByUserId === user.id ? "host" : "member",
+          });
+        })();
       },
       onMessage: (event, ws) => {
         handleRoomMessage(roomId, ws, event.data);

@@ -77,7 +77,7 @@ export default function HomePage() {
       </AppHeader>
 
       <main className="flex flex-1 flex-col gap-16 pb-16">
-        {/* Hero section with primary CTA and mocked room UI */}
+        {/* Hero section with primary CTA and sample room UI */}
         <section className="tt-container tt-section pt-8">
           <Card className="tt-hero-surface relative overflow-hidden border-none bg-transparent shadow-none">
             <div className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-white/18 blur-3xl" />

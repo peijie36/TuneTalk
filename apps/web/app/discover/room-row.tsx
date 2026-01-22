@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
 
-import type { RoomSummary } from "@tunetalk/shared";
+import type { RoomSummary } from "@tunetalk/shared/rooms";
 
 export interface RoomRowProps {
   room: RoomSummary;

@@ -1,8 +1,11 @@
 import { db } from "@tunetalk/db";
 import * as schema from "@tunetalk/db/schema";
-import type { RoomSummary } from "@tunetalk/shared";
-import { DEFAULT_ROOM_CAPACITY } from "@tunetalk/shared/rooms";
-import { eq, ilike } from "drizzle-orm";
+import {
+  DEFAULT_ROOM_CAPACITY,
+  type RoomSummary,
+} from "@tunetalk/shared/rooms";
+import argon2 from "argon2";
+import { and, eq, ilike } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -19,6 +22,10 @@ const createRoomSchema = z.object({
     .min(3, "Room name must be at least 3 characters.")
     .max(60, "Room name must be at most 60 characters."),
   isPublic: z.boolean().default(true),
+  password: z.string().trim().min(8).max(128).optional(),
+});
+
+const joinRoomSchema = z.object({
   password: z.string().trim().min(8).max(128).optional(),
 });
 
@@ -95,6 +102,7 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
     });
   })
   .get("/:roomId", async (c) => {
+    const user = c.get("user");
     const roomId = c.req.param("roomId");
 
     const room = await db.query.room.findFirst({
@@ -109,6 +117,18 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
     });
 
     if (!room) return c.json({ error: "Room not found" }, 404);
+
+    if (!room.isPublic) {
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+      const membership = await db.query.roomMember.findFirst({
+        where: (member, { and, eq }) =>
+          and(eq(member.roomId, roomId), eq(member.userId, user.id)),
+        columns: { roomId: true },
+      });
+
+      if (!membership) return c.json({ error: "Forbidden" }, 403);
+    }
 
     return c.json(
       formatRoomSummary({
@@ -134,21 +154,78 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       );
     }
 
-    if (!body.data.isPublic) {
-      return c.json({ error: "Private rooms aren't supported yet." }, 400);
+    if (!body.data.isPublic && !body.data.password) {
+      return c.json({ error: "Password is required for private rooms." }, 400);
     }
 
     const roomId = `room_${crypto.randomUUID()}`;
+    const passwordHash =
+      body.data.isPublic || !body.data.password
+        ? null
+        : await argon2.hash(body.data.password, { type: argon2.argon2id });
 
     await db.insert(schema.room).values({
       id: roomId,
       name: body.data.name,
       isPublic: body.data.isPublic,
-      passwordHash: null,
+      passwordHash,
       createdByUserId: user.id,
     });
 
+    await db
+      .insert(schema.roomMember)
+      .values({ roomId, userId: user.id, role: "host" })
+      .onConflictDoNothing();
+
     return c.json({ id: roomId }, 201);
+  })
+  .post("/:roomId/join", async (c) => {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const roomId = c.req.param("roomId");
+
+    const roomRow = await db
+      .select({
+        id: schema.room.id,
+        isPublic: schema.room.isPublic,
+        passwordHash: schema.room.passwordHash,
+      })
+      .from(schema.room)
+      .where(eq(schema.room.id, roomId))
+      .limit(1);
+
+    const room = roomRow.at(0);
+    if (!room) return c.json({ error: "Room not found" }, 404);
+
+    if (!room.isPublic) {
+      const jsonBody: unknown = await c.req.json().catch(() => ({}));
+      const body = joinRoomSchema.safeParse(jsonBody);
+      if (!body.success) {
+        return c.json(
+          { error: body.error.issues.at(0)?.message ?? "Invalid body" },
+          400
+        );
+      }
+
+      if (!body.data.password) {
+        return c.json({ error: "Password is required." }, 400);
+      }
+
+      if (!room.passwordHash) {
+        return c.json({ error: "Room password is not configured." }, 500);
+      }
+
+      const ok = await argon2.verify(room.passwordHash, body.data.password);
+      if (!ok) return c.json({ error: "Incorrect password." }, 403);
+    }
+
+    await db
+      .insert(schema.roomMember)
+      .values({ roomId, userId: user.id, role: "member" })
+      .onConflictDoNothing();
+
+    return c.json({ joined: true });
   })
   .post("/:roomId/leave", async (c) => {
     const user = c.get("user");
@@ -171,6 +248,15 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       broadcastRoomDisbanded(roomId);
       return c.json({ disbanded: true });
     }
+
+    await db
+      .delete(schema.roomMember)
+      .where(
+        and(
+          eq(schema.roomMember.roomId, roomId),
+          eq(schema.roomMember.userId, user.id)
+        )
+      );
 
     return c.json({ left: true });
   });

@@ -1,26 +1,52 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
-import { API_BASE_URL } from "@/lib/constants";
+import { ApiError, createRoom } from "@/api/rooms";
 
 type CreateRoomResult = { ok: true; id: string } | { ok: false; error: string };
 
 export function useCreateRoom() {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+
+  const {
+    isPending: isCreating,
+    mutateAsync: createRoomMutation,
+    reset: resetMutation,
+  } = useMutation({
+    mutationFn: async ({
+      roomName,
+      isPublic,
+      password,
+    }: {
+      roomName: string;
+      isPublic: boolean;
+      password?: string;
+    }) => {
+      return await createRoom({
+        name: roomName,
+        isPublic,
+        password,
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+    },
+  });
 
   const reset = useCallback(() => {
     setName("My Room");
     setIsPublic(true);
     setPassword("");
     setError(null);
-    setIsCreating(false);
-  }, []);
+    resetMutation();
+  }, [resetMutation]);
 
   const openModal = useCallback(() => {
     reset();
@@ -30,8 +56,8 @@ export function useCreateRoom() {
   const closeModal = useCallback(() => {
     setOpen(false);
     setError(null);
-    setIsCreating(false);
-  }, []);
+    resetMutation();
+  }, [resetMutation]);
 
   const submit = useCallback(async (): Promise<CreateRoomResult> => {
     if (isCreating) return { ok: false, error: "Already creating." };
@@ -43,56 +69,34 @@ export function useCreateRoom() {
     }
 
     if (!isPublic) {
-      setError("Private rooms aren't supported yet.");
-      return { ok: false, error: "Private rooms aren't supported yet." };
+      const passwordTrimmed = password.trim();
+      if (passwordTrimmed.length < 8) {
+        setError("Password must be at least 8 characters.");
+        return { ok: false, error: "Password must be at least 8 characters." };
+      }
     }
 
-    setIsCreating(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/rooms`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: trimmed,
-          isPublic,
-          password: password || undefined,
-        }),
+      const result = await createRoomMutation({
+        roomName: trimmed,
+        isPublic,
+        password: isPublic ? undefined : password.trim(),
       });
-
-      const payload: unknown = await response.json().catch(() => null);
-      const createdId =
-        payload &&
-        typeof payload === "object" &&
-        typeof (payload as { id?: unknown }).id === "string"
-          ? (payload as { id: string }).id
-          : null;
-
-      if (!response.ok || !createdId) {
-        const serverError =
-          payload &&
-          typeof payload === "object" &&
-          typeof (payload as { error?: unknown }).error === "string"
-            ? (payload as { error: string }).error
-            : null;
-        throw new Error(
-          serverError ?? `Failed to create room (${response.status})`
-        );
-      }
-
       setOpen(false);
-      setIsCreating(false);
-      return { ok: true, id: createdId };
+      return { ok: true, id: result.id };
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to create room.";
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Failed to create room.";
       setError(message);
-      setIsCreating(false);
       return { ok: false, error: message };
     }
-  }, [isCreating, isPublic, name, password]);
+  }, [createRoomMutation, isCreating, isPublic, name, password]);
 
   return {
     open,
