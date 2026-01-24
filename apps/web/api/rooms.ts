@@ -1,3 +1,4 @@
+import type { RoomChatMessage } from "@tunetalk/shared/room-realtime";
 import type { RoomSummary } from "@tunetalk/shared/rooms";
 
 import { API_BASE_URL } from "@/lib/constants";
@@ -98,6 +99,57 @@ function coerceRoomList(payload: unknown): RoomSummary[] {
   );
 }
 
+function coerceRoomMessage(value: unknown): RoomChatMessage | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+
+  const id = typeof record.id === "string" ? record.id : null;
+  const text = typeof record.text === "string" ? record.text : null;
+  const createdAt =
+    typeof record.createdAt === "string" ? record.createdAt : null;
+  const createdAtMs =
+    typeof createdAt === "string" ? Date.parse(createdAt) : Number.NaN;
+
+  const sender = record.sender as { id?: unknown; name?: unknown } | undefined;
+  const senderId = typeof sender?.id === "string" ? sender.id : null;
+  const senderName = typeof sender?.name === "string" ? sender.name : null;
+
+  if (
+    !id ||
+    !text ||
+    !createdAt ||
+    Number.isNaN(createdAtMs) ||
+    !senderId ||
+    !senderName
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    sender: { id: senderId, name: senderName },
+    text,
+    createdAt,
+  };
+}
+
+function coerceRoomMessageList(payload: unknown): RoomChatMessage[] {
+  const list = Array.isArray(payload)
+    ? payload
+    : (payload as { messages?: unknown })?.messages;
+  if (!Array.isArray(list)) return [];
+
+  const messages: RoomChatMessage[] = [];
+  for (const item of list) {
+    const message = coerceRoomMessage(item);
+    if (message) messages.push(message);
+  }
+
+  return messages.sort(
+    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
+  );
+}
+
 export async function listRooms({
   signal,
 }: {
@@ -146,6 +198,48 @@ export async function getRoom(
   const room = coerceRoom(payload);
   if (!room) throw new ApiError(500, "Invalid room response");
   return room;
+}
+
+export async function listRoomMessages(
+  roomId: string,
+  {
+    signal,
+    cursor,
+    limit,
+  }: { signal?: AbortSignal; cursor?: string; limit?: number } = {}
+): Promise<{ messages: RoomChatMessage[]; nextCursor: string | null }> {
+  const url = new URL(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/messages`
+  );
+  if (typeof limit === "number") url.searchParams.set("limit", String(limit));
+  if (cursor) url.searchParams.set("cursor", cursor);
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+
+  const payload: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ?? `Failed to load messages (${response.status})`
+    );
+  }
+
+  const nextCursor =
+    payload &&
+    typeof payload === "object" &&
+    typeof (payload as { nextCursor?: unknown }).nextCursor === "string"
+      ? (payload as { nextCursor: string }).nextCursor
+      : null;
+
+  return {
+    messages: coerceRoomMessageList(payload),
+    nextCursor,
+  };
 }
 
 export async function createRoom({

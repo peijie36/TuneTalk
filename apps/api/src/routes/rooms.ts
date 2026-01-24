@@ -5,7 +5,7 @@ import {
   type RoomSummary,
 } from "@tunetalk/shared/rooms";
 import argon2 from "argon2";
-import { and, eq, ilike } from "drizzle-orm";
+import { and, desc, eq, ilike, lt } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -140,6 +140,86 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
         presenceCount: getRoomPresenceCount(room.id),
       })
     );
+  })
+  .get("/:roomId/messages", async (c) => {
+    const user = c.get("user");
+    const roomId = c.req.param("roomId");
+
+    const limitRaw = c.req.query("limit");
+    const limitParsed = Number(limitRaw);
+    const limit = Number.isFinite(limitParsed)
+      ? Math.min(100, Math.max(1, Math.trunc(limitParsed)))
+      : 50;
+
+    const cursorId = (c.req.query("cursor") ?? "").trim();
+
+    const room = await db.query.room.findFirst({
+      where: (room, { eq }) => eq(room.id, roomId),
+      columns: {
+        id: true,
+        isPublic: true,
+      },
+    });
+
+    if (!room) return c.json({ error: "Room not found" }, 404);
+
+    if (!room.isPublic) {
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+      const membership = await db.query.roomMember.findFirst({
+        where: (member, { and, eq }) =>
+          and(eq(member.roomId, roomId), eq(member.userId, user.id)),
+        columns: { roomId: true },
+      });
+
+      if (!membership) return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const cursorMessage =
+      cursorId.length > 0
+        ? await db.query.roomMessage.findFirst({
+            where: (message, { and, eq }) =>
+              and(eq(message.id, cursorId), eq(message.roomId, roomId)),
+            columns: { createdAt: true },
+          })
+        : null;
+
+    const rows = await db
+      .select({
+        id: schema.roomMessage.id,
+        text: schema.roomMessage.text,
+        createdAt: schema.roomMessage.createdAt,
+        userId: schema.roomMessage.userId,
+        userName: schema.user.name,
+      })
+      .from(schema.roomMessage)
+      .leftJoin(schema.user, eq(schema.user.id, schema.roomMessage.userId))
+      .where(
+        cursorMessage
+          ? and(
+              eq(schema.roomMessage.roomId, roomId),
+              lt(schema.roomMessage.createdAt, cursorMessage.createdAt)
+            )
+          : eq(schema.roomMessage.roomId, roomId)
+      )
+      .orderBy(desc(schema.roomMessage.createdAt))
+      .limit(limit);
+
+    const messages = rows
+      .map((row) => ({
+        id: row.id,
+        sender: {
+          id: row.userId,
+          name: row.userName ?? "Unknown",
+        },
+        text: row.text,
+        createdAt: row.createdAt.toISOString(),
+      }))
+      .reverse();
+
+    const nextCursor = rows.length === limit ? (rows.at(-1)?.id ?? null) : null;
+
+    return c.json({ messages, nextCursor });
   })
   .post("/", async (c) => {
     const user = c.get("user");

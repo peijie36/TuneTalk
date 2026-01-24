@@ -83,6 +83,28 @@ export const roomQueueItem = pgTable(
   ]
 );
 
+export const roomMessage = pgTable(
+  "room_message",
+  {
+    id: text("id").primaryKey(),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => room.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("room_message_roomId_createdAt_idx").on(
+      table.roomId,
+      table.createdAt
+    ),
+    index("room_message_userId_idx").on(table.userId),
+  ]
+);
+
 export const roomRelations = relations(room, ({ many, one }) => ({
   createdByUser: one(user, {
     fields: [room.createdByUserId],
@@ -90,6 +112,7 @@ export const roomRelations = relations(room, ({ many, one }) => ({
   }),
   members: many(roomMember),
   queue: many(roomQueueItem),
+  messages: many(roomMessage),
 }));
 
 export const roomMemberRelations = relations(roomMember, ({ one }) => ({
@@ -110,6 +133,17 @@ export const roomQueueItemRelations = relations(roomQueueItem, ({ one }) => ({
   }),
   addedByUser: one(user, {
     fields: [roomQueueItem.addedByUserId],
+    references: [user.id],
+  }),
+}));
+
+export const roomMessageRelations = relations(roomMessage, ({ one }) => ({
+  room: one(room, {
+    fields: [roomMessage.roomId],
+    references: [room.id],
+  }),
+  user: one(user, {
+    fields: [roomMessage.userId],
     references: [user.id],
   }),
 }));

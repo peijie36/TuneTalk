@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -13,7 +13,13 @@ import {
 
 import { LogOut, Send, Users } from "lucide-react";
 
-import { ApiError, getRoom, leaveRoom } from "@/api/rooms";
+import type {
+  RoomChatMessage,
+  RoomPresenceParticipant,
+  RoomRealtimeEvent,
+} from "@tunetalk/shared/room-realtime";
+
+import { ApiError, leaveRoom } from "@/api/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -22,30 +28,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useRoom } from "@/hooks/use-room";
+import { useRoomMessages } from "@/hooks/use-room-messages";
 import { authClient } from "@/lib/auth-client";
 import { API_BASE_URL } from "@/lib/constants";
 import { cn } from "@/utils/cn";
 import { getInitials, normalizeText } from "@/utils/string-utils";
-
-interface PresenceParticipant {
-  id: string;
-  name: string;
-  role: "host" | "member";
-}
-
-interface ChatEvent {
-  id: string;
-  sender: { id: string; name: string };
-  text: string;
-  createdAt: string;
-}
-
-type RoomWsEvent =
-  | { type: "ping" }
-  | { type: "pong" }
-  | { type: "room_disbanded"; roomId: string }
-  | { type: "presence"; roomId: string; participants: PresenceParticipant[] }
-  | ({ type: "chat"; roomId: string } & ChatEvent);
 
 function toWebSocketUrl(baseUrl: string) {
   if (baseUrl.startsWith("https://")) return `wss://${baseUrl.slice(8)}`;
@@ -53,7 +41,7 @@ function toWebSocketUrl(baseUrl: string) {
   return baseUrl;
 }
 
-function parseWsEvent(data: string): RoomWsEvent | null {
+function parseWsEvent(data: string): RoomRealtimeEvent | null {
   let payload: unknown;
   try {
     payload = JSON.parse(data);
@@ -65,7 +53,7 @@ function parseWsEvent(data: string): RoomWsEvent | null {
   const record = payload as Record<string, unknown>;
   const type = record.type;
 
-  if (type === "ping" || type === "pong") return { type } as RoomWsEvent;
+  if (type === "ping" || type === "pong") return { type } as RoomRealtimeEvent;
 
   if (type === "room_disbanded" && typeof record.roomId === "string") {
     return { type: "room_disbanded", roomId: record.roomId };
@@ -76,7 +64,7 @@ function parseWsEvent(data: string): RoomWsEvent | null {
     typeof record.roomId === "string" &&
     Array.isArray(record.participants)
   ) {
-    const participants: PresenceParticipant[] = [];
+    const participants: RoomPresenceParticipant[] = [];
     for (const item of record.participants) {
       if (!item || typeof item !== "object") continue;
       const p = item as Record<string, unknown>;
@@ -133,22 +121,17 @@ export default function RoomPage() {
 
   const [participantQuery, setParticipantQuery] = useState("");
   const deferredParticipantQuery = useDeferredValue(participantQuery);
-  const [participants, setParticipants] = useState<PresenceParticipant[]>([]);
+  const [participants, setParticipants] = useState<RoomPresenceParticipant[]>(
+    []
+  );
 
   const [messageDraft, setMessageDraft] = useState("");
-  const [messages, setMessages] = useState<ChatEvent[]>([]);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const sessionUserId = session?.user?.id ?? null;
 
-  const roomQuery = useQuery({
-    queryKey: ["room", roomId],
-    queryFn: ({ signal }) => getRoom(roomId, { signal }),
-    enabled: !!roomId && roomId !== "unknown",
-    retry: 0,
-    refetchOnWindowFocus: false,
-  });
+  const roomQuery = useRoom(roomId);
 
   const room = roomQuery.data ?? null;
   const isLoadingRoom = roomQuery.isFetching && !roomQuery.data;
@@ -192,6 +175,9 @@ export default function RoomPage() {
 
   const isLeaving = leaveMutation.isPending;
 
+  const messagesQuery = useRoomMessages(roomId, !!roomQuery.data);
+  const messages = messagesQuery.data?.messages ?? [];
+
   useEffect(() => {
     if (!roomId || roomId === "unknown") return;
     if (!sessionUserId) return;
@@ -224,15 +210,35 @@ export default function RoomPage() {
       }
 
       if (parsed.type === "chat" && parsed.roomId === roomId) {
-        setMessages((current) => [
-          ...current,
-          {
-            id: parsed.id,
-            sender: parsed.sender,
-            text: parsed.text,
-            createdAt: parsed.createdAt,
-          },
-        ]);
+        const message: RoomChatMessage = {
+          id: parsed.id,
+          sender: parsed.sender,
+          text: parsed.text,
+          createdAt: parsed.createdAt,
+        };
+
+        queryClient.setQueryData(
+          ["roomMessages", roomId],
+          (
+            current:
+              | { messages: RoomChatMessage[]; nextCursor: string | null }
+              | undefined
+          ) => {
+            const existing = current?.messages ?? [];
+            if (existing.some((m) => m.id === message.id)) {
+              return current ?? { messages: existing, nextCursor: null };
+            }
+
+            const next = [...existing, message].sort(
+              (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
+            );
+
+            return {
+              messages: next,
+              nextCursor: current?.nextCursor ?? null,
+            };
+          }
+        );
       }
     });
 
@@ -458,11 +464,15 @@ export default function RoomPage() {
                   >
                     {!sessionUserId ? (
                       <div className="text-muted-foreground text-sm">
-                        Sign in to chat.
+                        Sign in to chat (messages are visible).
                       </div>
-                    ) : messages.length === 0 ? (
+                    ) : null}
+
+                    {messages.length === 0 ? (
                       <div className="text-muted-foreground text-sm">
-                        No messages yet. Say hello!
+                        {messagesQuery.isFetching
+                          ? "Loading messages..."
+                          : "No messages yet. Say hello!"}
                       </div>
                     ) : (
                       messages.map((message) => {

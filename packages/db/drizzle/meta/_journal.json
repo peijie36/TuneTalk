@@ -15,6 +15,13 @@
       "when": 1768543899663,
       "tag": "0001_brief_fat_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769227461893,
+      "tag": "0002_smart_jack_murdock",
+      "breakpoints": true
     }
   ]
 }
