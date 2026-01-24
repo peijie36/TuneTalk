@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -12,9 +13,7 @@ import {
 
 import { LogOut, Send, Users } from "lucide-react";
 
-import type { RoomSummary } from "@tunetalk/shared/rooms";
-
-import { ApiError, getRoom } from "@/api/rooms";
+import { ApiError, getRoom, leaveRoom } from "@/api/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -128,14 +127,9 @@ export default function RoomPage() {
   }, [routeParams.roomId]);
 
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
-
-  const [room, setRoom] = useState<RoomSummary | null>(null);
-  const [isLoadingRoom, setIsLoadingRoom] = useState(false);
-  const [isLeaving, setIsLeaving] = useState(false);
-  const isMountedRef = useRef(true);
-  const hasSeenRoomRef = useRef(false);
 
   const [participantQuery, setParticipantQuery] = useState("");
   const deferredParticipantQuery = useDeferredValue(participantQuery);
@@ -148,57 +142,60 @@ export default function RoomPage() {
 
   const sessionUserId = session?.user?.id ?? null;
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const roomQuery = useQuery({
+    queryKey: ["room", roomId],
+    queryFn: ({ signal }) => getRoom(roomId, { signal }),
+    enabled: !!roomId && roomId !== "unknown",
+    retry: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const room = roomQuery.data ?? null;
+  const isLoadingRoom = roomQuery.isFetching && !roomQuery.data;
 
   useEffect(() => {
-    if (!roomId || roomId === "unknown") return;
+    const error = roomQuery.error;
+    if (!error) return;
 
-    let cancelled = false;
-    setIsLoadingRoom(true);
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        router.replace(
+          roomQuery.data
+            ? "/discover?toast=disbanded"
+            : "/discover?toast=room_not_found"
+        );
+        return;
+      }
 
-    void getRoom(roomId)
-      .then((nextRoom) => {
-        if (cancelled) return;
-        hasSeenRoomRef.current = true;
-        setRoom(nextRoom);
-      })
-      .catch((error) => {
-        if (cancelled) return;
+      if (error.status === 401 || error.status === 403) {
+        router.replace("/discover?toast=password_required");
+        return;
+      }
+    }
+  }, [roomQuery.data, roomQuery.error, router]);
 
-        if (error instanceof ApiError) {
-          if (error.status === 404) {
-            router.replace(
-              hasSeenRoomRef.current
-                ? "/discover?toast=disbanded"
-                : "/discover?toast=room_not_found"
-            );
-            return;
-          }
+  const leaveMutation = useMutation({
+    mutationFn: async () => {
+      if (!roomId || roomId === "unknown") throw new Error("Missing room id");
+      return await leaveRoom(roomId);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["rooms"] });
 
-          if (error.status === 401 || error.status === 403) {
-            router.replace("/discover?toast=password_required");
-            return;
-          }
-        }
-      })
-      .finally(() => {
-        if (cancelled) return;
-        if (isMountedRef.current) setIsLoadingRoom(false);
-      });
+      router.replace(
+        "disbanded" in result && result.disbanded
+          ? "/discover?toast=disbanded"
+          : "/discover"
+      );
+    },
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [roomId, router]);
+  const isLeaving = leaveMutation.isPending;
 
   useEffect(() => {
     if (!roomId || roomId === "unknown") return;
     if (!sessionUserId) return;
+    if (!roomQuery.data) return;
 
     const url = `${toWebSocketUrl(API_BASE_URL)}/api/rooms/${encodeURIComponent(roomId)}/ws`;
     const ws = new WebSocket(url);
@@ -216,6 +213,7 @@ export default function RoomPage() {
       }
 
       if (parsed.type === "room_disbanded" && parsed.roomId === roomId) {
+        void queryClient.invalidateQueries({ queryKey: ["rooms"] });
         router.replace("/discover?toast=disbanded");
         return;
       }
@@ -238,15 +236,19 @@ export default function RoomPage() {
       }
     });
 
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (event) => {
       if (wsRef.current === ws) wsRef.current = null;
+
+      if (event.code === 1008) {
+        router.replace("/discover?toast=password_required");
+      }
     });
 
     return () => {
       if (wsRef.current === ws) wsRef.current = null;
       ws.close();
     };
-  }, [roomId, router, sessionUserId]);
+  }, [queryClient, roomId, roomQuery.data, router, sessionUserId]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -262,38 +264,10 @@ export default function RoomPage() {
     );
   }, [deferredParticipantQuery, participants]);
 
-  const handleLeave = useCallback(async () => {
-    if (isLeaving) return;
-    setIsLeaving(true);
-
-    try {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/leave`,
-        {
-          method: "POST",
-          credentials: "include",
-          signal: controller.signal,
-        }
-      );
-
-      window.clearTimeout(timeout);
-
-      const payload: unknown = await response.json().catch(() => null);
-      const disbanded =
-        payload &&
-        typeof payload === "object" &&
-        (payload as { disbanded?: unknown }).disbanded === true;
-
-      router.replace(disbanded ? "/discover?toast=disbanded" : "/discover");
-    } catch {
-      router.replace("/discover");
-    } finally {
-      if (isMountedRef.current) setIsLeaving(false);
-    }
-  }, [isLeaving, roomId, router]);
+  const handleLeave = useCallback(() => {
+    if (leaveMutation.isPending) return;
+    leaveMutation.mutate();
+  }, [leaveMutation]);
 
   const handleSend = useCallback(() => {
     const text = messageDraft.trim();
@@ -445,7 +419,7 @@ export default function RoomPage() {
 
                   <Button
                     type="button"
-                    onClick={() => void handleLeave()}
+                    onClick={handleLeave}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full border-transparent"
                     disabled={isLeaving || isSessionPending || !sessionUserId}
                   >
@@ -525,7 +499,7 @@ export default function RoomPage() {
                               </div>
                               <div
                                 className={cn(
-                                  "rounded-2xl px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm",
+                                  "rounded-2xl px-4 py-3 text-sm leading-relaxed wrap-break-word whitespace-pre-wrap shadow-sm",
                                   isYou
                                     ? "bg-primary text-primary-foreground rounded-br-md"
                                     : "bg-muted/70 text-text-strong rounded-bl-md"

@@ -212,3 +212,33 @@ export async function joinRoom(
 
   return { joined: true };
 }
+
+export async function leaveRoom(
+  roomId: string,
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<{ left: true } | { disbanded: true }> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/leave`,
+    {
+      method: "POST",
+      credentials: "include",
+      signal,
+    }
+  );
+
+  const payload: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ?? `Failed to leave room (${response.status})`
+    );
+  }
+
+  const disbanded =
+    payload &&
+    typeof payload === "object" &&
+    (payload as { disbanded?: unknown }).disbanded === true;
+
+  return disbanded ? { disbanded: true } : { left: true };
+}
