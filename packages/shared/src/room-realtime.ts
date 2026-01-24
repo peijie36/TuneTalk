@@ -17,6 +17,7 @@ export type RoomRealtimeEvent =
   | { type: "ping" }
   | { type: "pong" }
   | { type: "room_disbanded"; roomId: string }
+  | { type: "chat_error"; roomId: string; error: string }
   | {
       type: "presence";
       roomId: string;

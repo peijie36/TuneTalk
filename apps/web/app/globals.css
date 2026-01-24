@@ -339,6 +339,15 @@
     margin-right: auto;
   }
 
+  .tt-scrollbar-hidden {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .tt-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+
   @media (max-width: 640px) {
     .tt-container {
       width: min(1040px, 100% - 24px);

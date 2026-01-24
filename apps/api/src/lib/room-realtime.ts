@@ -7,6 +7,8 @@ import type { RoomRealtimeEvent } from "@tunetalk/shared/room-realtime";
 const WS_OPEN_STATE = 1;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const STALE_AFTER_MS = 45_000;
+const CHAT_RATE_WINDOW_MS = 10_000;
+const CHAT_RATE_MAX = 8;
 const rooms = new Map<
   string,
   Map<
@@ -18,6 +20,24 @@ const rooms = new Map<
     }
   >
 >();
+const chatRateLimits = new Map<
+  string,
+  { windowStartMs: number; count: number }
+>();
+
+function allowChatMessage(roomId: string, userId: string) {
+  const now = Date.now();
+  const key = `${roomId}:${userId}`;
+  const state = chatRateLimits.get(key);
+  if (!state || now - state.windowStartMs >= CHAT_RATE_WINDOW_MS) {
+    chatRateLimits.set(key, { windowStartMs: now, count: 1 });
+    return true;
+  }
+
+  if (state.count >= CHAT_RATE_MAX) return false;
+  state.count += 1;
+  return true;
+}
 
 function safeSend(ws: WSContext, event: RoomRealtimeEvent) {
   if (ws.readyState !== WS_OPEN_STATE) return;
@@ -146,6 +166,15 @@ export function handleRoomMessage(
   if (!text) return;
   if (text.length > 500) return;
 
+  if (!allowChatMessage(roomId, state.user.id)) {
+    safeSend(ws, {
+      type: "chat_error",
+      roomId,
+      error: "You're sending messages too fast. Please slow down.",
+    });
+    return;
+  }
+
   void (async () => {
     try {
       const inserted = await db
@@ -178,7 +207,11 @@ export function handleRoomMessage(
         safeSend(socket, event);
       }
     } catch {
-      // ignore persistence failures for now
+      safeSend(ws, {
+        type: "chat_error",
+        roomId,
+        error: "Failed to send message. Please try again.",
+      });
     }
   })();
 }

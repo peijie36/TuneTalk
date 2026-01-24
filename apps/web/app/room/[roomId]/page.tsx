@@ -1,6 +1,8 @@
 "use client";
 
+import type { InfiniteData } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -47,6 +49,12 @@ function isNearBottom(element: HTMLElement, threshold = 96) {
   );
 }
 
+function formatMessageTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function parseWsEvent(data: string): RoomRealtimeEvent | null {
   let payload: unknown;
   try {
@@ -63,6 +71,14 @@ function parseWsEvent(data: string): RoomRealtimeEvent | null {
 
   if (type === "room_disbanded" && typeof record.roomId === "string") {
     return { type: "room_disbanded", roomId: record.roomId };
+  }
+
+  if (
+    type === "chat_error" &&
+    typeof record.roomId === "string" &&
+    typeof record.error === "string"
+  ) {
+    return { type: "chat_error", roomId: record.roomId, error: record.error };
   }
 
   if (
@@ -108,6 +124,11 @@ function parseWsEvent(data: string): RoomRealtimeEvent | null {
   }
 
   return null;
+}
+
+interface RoomMessagesPage {
+  messages: RoomChatMessage[];
+  nextCursor: string | null;
 }
 
 function insertRoomMessage(
@@ -161,6 +182,8 @@ export default function RoomPage() {
   );
 
   const [messageDraft, setMessageDraft] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -212,7 +235,29 @@ export default function RoomPage() {
   const isLeaving = leaveMutation.isPending;
 
   const messagesQuery = useRoomMessages(roomId, !!roomQuery.data);
-  const messages = messagesQuery.data?.messages ?? [];
+  const messages = useMemo(() => {
+    const pages = messagesQuery.data?.pages ?? [];
+    if (pages.length === 0) return [];
+
+    const ordered: RoomChatMessage[] = [];
+    const seen = new Set<string>();
+    for (const page of pages.slice().reverse()) {
+      for (const message of page.messages) {
+        if (seen.has(message.id)) continue;
+        seen.add(message.id);
+        ordered.push(message);
+      }
+    }
+
+    return ordered;
+  }, [messagesQuery.data]);
+
+  const chatVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => chatScrollRef.current,
+    estimateSize: () => 104,
+    overscan: 10,
+  });
 
   useEffect(() => {
     if (!roomId || roomId === "unknown") return;
@@ -245,6 +290,11 @@ export default function RoomPage() {
         return;
       }
 
+      if (parsed.type === "chat_error" && parsed.roomId === roomId) {
+        setChatError(parsed.error);
+        return;
+      }
+
       if (parsed.type === "chat" && parsed.roomId === roomId) {
         const message: RoomChatMessage = {
           id: parsed.id,
@@ -253,20 +303,37 @@ export default function RoomPage() {
           createdAt: parsed.createdAt,
         };
 
-        queryClient.setQueryData(
+        queryClient.setQueryData<InfiniteData<RoomMessagesPage>>(
           ["roomMessages", roomId],
-          (
-            current:
-              | { messages: RoomChatMessage[]; nextCursor: string | null }
-              | undefined
-          ) => {
-            const existing = current?.messages ?? [];
-            return {
-              messages: insertRoomMessage(existing, message),
-              nextCursor: current?.nextCursor ?? null,
+          (current) => {
+            const base =
+              current ??
+              ({
+                pages: [{ messages: [], nextCursor: null }],
+                pageParams: [undefined],
+              } satisfies InfiniteData<RoomMessagesPage>);
+
+            const nextPages = base.pages.map((page) => ({
+              ...page,
+              messages: page.messages.filter((m) => m.id !== message.id),
+            }));
+
+            if (nextPages.length === 0) {
+              nextPages.push({ messages: [], nextCursor: null });
+            }
+
+            nextPages[0] = {
+              ...nextPages[0],
+              messages: insertRoomMessage(nextPages[0].messages, message),
             };
+
+            return { ...base, pages: nextPages };
           }
         );
+
+        if (!shouldStickToBottomRef.current) {
+          setUnreadCount((count) => count + 1);
+        }
       }
     });
 
@@ -299,6 +366,46 @@ export default function RoomPage() {
     const el = chatScrollRef.current;
     if (!el) return;
     shouldStickToBottomRef.current = isNearBottom(el);
+    if (shouldStickToBottomRef.current) setUnreadCount(0);
+  }, []);
+
+  const handleLoadOlder = useCallback(async () => {
+    if (!messagesQuery.hasNextPage || messagesQuery.isFetchingNextPage) return;
+    const el = chatScrollRef.current;
+    if (!el) {
+      await messagesQuery.fetchNextPage();
+      return;
+    }
+
+    shouldStickToBottomRef.current = false;
+
+    const prevScrollHeight = el.scrollHeight;
+    const prevScrollTop = el.scrollTop;
+
+    await messagesQuery.fetchNextPage();
+
+    requestAnimationFrame(() => {
+      const nextScrollHeight = el.scrollHeight;
+      el.scrollTop = prevScrollTop + (nextScrollHeight - prevScrollHeight);
+    });
+  }, [
+    messagesQuery.fetchNextPage,
+    messagesQuery.hasNextPage,
+    messagesQuery.isFetchingNextPage,
+  ]);
+
+  useEffect(() => {
+    if (!chatError) return;
+    const timeout = window.setTimeout(() => setChatError(null), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [chatError]);
+
+  const handleJumpToLatest = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    shouldStickToBottomRef.current = true;
+    setUnreadCount(0);
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, []);
 
   const filteredParticipants = useMemo(() => {
@@ -497,80 +604,147 @@ export default function RoomPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-0">
-                  <div
-                    ref={chatScrollRef}
-                    className="border-border/70 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border bg-white/80 p-4 shadow-inner"
-                    onScroll={handleChatScroll}
-                  >
-                    {!sessionUserId ? (
-                      <div className="text-muted-foreground text-sm">
-                        Sign in to chat (messages are visible).
+                  {messagesQuery.hasNextPage ? (
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void handleLoadOlder()}
+                        disabled={messagesQuery.isFetchingNextPage}
+                      >
+                        {messagesQuery.isFetchingNextPage
+                          ? "Loading..."
+                          : "Load older messages"}
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  <div className="relative min-h-0 flex-1">
+                    <div
+                      ref={chatScrollRef}
+                      className="border-border/70 tt-scrollbar-hidden h-full min-h-0 overflow-y-auto rounded-2xl border bg-white/80 p-4 shadow-inner"
+                      onScroll={handleChatScroll}
+                    >
+                      {!sessionUserId ? (
+                        <div className="text-muted-foreground text-sm">
+                          Sign in to chat (messages are visible).
+                        </div>
+                      ) : null}
+
+                      {messages.length === 0 ? (
+                        <div className="text-muted-foreground text-sm">
+                          {messagesQuery.isFetching
+                            ? "Loading messages..."
+                            : "No messages yet. Say hello!"}
+                        </div>
+                      ) : (
+                        <div
+                          className="relative w-full"
+                          style={{ height: chatVirtualizer.getTotalSize() }}
+                        >
+                          {chatVirtualizer.getVirtualItems().map((item) => {
+                            const message = messages[item.index];
+                            const isYou = message.sender.id === sessionUserId;
+                            const avatarLabel = isYou
+                              ? (session?.user?.name ??
+                                session?.user?.email ??
+                                "You")
+                              : message.sender.name;
+                            const timeLabel = formatMessageTime(
+                              message.createdAt
+                            );
+
+                            return (
+                              <div
+                                key={item.key}
+                                data-index={item.index}
+                                ref={chatVirtualizer.measureElement}
+                                className="absolute top-0 left-0 w-full py-1"
+                                style={{
+                                  transform: `translateY(${item.start}px)`,
+                                }}
+                              >
+                                <div
+                                  className={cn(
+                                    "flex w-full items-end gap-2",
+                                    isYou ? "justify-end" : "justify-start"
+                                  )}
+                                >
+                                  {!isYou ? (
+                                    <Avatar className="h-9 w-9 border border-white/60">
+                                      <AvatarFallback>
+                                        {getInitials(avatarLabel)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  ) : null}
+
+                                  <div
+                                    className={cn(
+                                      "flex max-w-[78%] flex-col gap-1 sm:max-w-[70%]",
+                                      isYou
+                                        ? "items-end text-right"
+                                        : "items-start"
+                                    )}
+                                  >
+                                    <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-semibold">
+                                      <span>
+                                        {isYou ? "You" : message.sender.name}
+                                      </span>
+                                      {timeLabel ? (
+                                        <span className="text-muted-foreground/80 font-medium">
+                                          {timeLabel}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "rounded-2xl px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm",
+                                        isYou
+                                          ? "bg-primary text-primary-foreground rounded-br-md"
+                                          : "bg-muted/70 text-text-strong rounded-bl-md"
+                                      )}
+                                    >
+                                      {message.text}
+                                    </div>
+                                  </div>
+
+                                  {isYou ? (
+                                    <Avatar className="h-9 w-9 border border-white/60">
+                                      <AvatarFallback>
+                                        {getInitials(avatarLabel)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {unreadCount > 0 ? (
+                      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="pointer-events-auto shadow-md"
+                          onClick={handleJumpToLatest}
+                        >
+                          {unreadCount} new{" "}
+                          {unreadCount === 1 ? "message" : "messages"} • Jump to
+                          latest
+                        </Button>
                       </div>
                     ) : null}
-
-                    {messages.length === 0 ? (
-                      <div className="text-muted-foreground text-sm">
-                        {messagesQuery.isFetching
-                          ? "Loading messages..."
-                          : "No messages yet. Say hello!"}
-                      </div>
-                    ) : (
-                      messages.map((message) => {
-                        const isYou = message.sender.id === sessionUserId;
-                        const avatarLabel = isYou
-                          ? (session?.user?.name ??
-                            session?.user?.email ??
-                            "You")
-                          : message.sender.name;
-                        return (
-                          <div
-                            key={message.id}
-                            className={cn(
-                              "flex w-full items-end gap-2",
-                              isYou ? "justify-end" : "justify-start"
-                            )}
-                          >
-                            {!isYou ? (
-                              <Avatar className="h-9 w-9 border border-white/60">
-                                <AvatarFallback>
-                                  {getInitials(avatarLabel)}
-                                </AvatarFallback>
-                              </Avatar>
-                            ) : null}
-
-                            <div
-                              className={cn(
-                                "flex max-w-[78%] flex-col gap-1 sm:max-w-[70%]",
-                                isYou ? "items-end text-right" : "items-start"
-                              )}
-                            >
-                              <div className="text-muted-foreground px-1 text-xs font-semibold">
-                                {isYou ? "You" : message.sender.name}
-                              </div>
-                              <div
-                                className={cn(
-                                  "rounded-2xl px-4 py-3 text-sm leading-relaxed wrap-break-word whitespace-pre-wrap shadow-sm",
-                                  isYou
-                                    ? "bg-primary text-primary-foreground rounded-br-md"
-                                    : "bg-muted/70 text-text-strong rounded-bl-md"
-                                )}
-                              >
-                                {message.text}
-                              </div>
-                            </div>
-
-                            {isYou ? (
-                              <Avatar className="h-9 w-9 border border-white/60">
-                                <AvatarFallback>
-                                  {getInitials(avatarLabel)}
-                                </AvatarFallback>
-                              </Avatar>
-                            ) : null}
-                          </div>
-                        );
-                      })
-                    )}
                   </div>
+
+                  {chatError ? (
+                    <p className="text-destructive text-sm font-medium">
+                      {chatError}
+                    </p>
+                  ) : null}
 
                   <div className="flex items-center gap-2">
                     <Input

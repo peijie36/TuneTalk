@@ -94,7 +94,9 @@ export const roomMessage = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     text: text("text").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => [
     index("room_message_roomId_createdAt_idx").on(
