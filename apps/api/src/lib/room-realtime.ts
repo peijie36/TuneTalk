@@ -1,22 +1,8 @@
 import type { WSContext } from "hono/ws";
 
-type RoomEvent =
-  | { type: "room_disbanded"; roomId: string }
-  | {
-      type: "presence";
-      roomId: string;
-      participants: { id: string; name: string; role: "host" | "member" }[];
-    }
-  | {
-      type: "chat";
-      roomId: string;
-      id: string;
-      sender: { id: string; name: string };
-      text: string;
-      createdAt: string;
-    }
-  | { type: "ping" }
-  | { type: "pong" };
+import { db } from "@tunetalk/db";
+import * as schema from "@tunetalk/db/schema";
+import type { RoomRealtimeEvent } from "@tunetalk/shared/room-realtime";
 
 const WS_OPEN_STATE = 1;
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -33,7 +19,7 @@ const rooms = new Map<
   >
 >();
 
-function safeSend(ws: WSContext, event: RoomEvent) {
+function safeSend(ws: WSContext, event: RoomRealtimeEvent) {
   if (ws.readyState !== WS_OPEN_STATE) return;
   try {
     ws.send(JSON.stringify(event));
@@ -160,18 +146,41 @@ export function handleRoomMessage(
   if (!text) return;
   if (text.length > 500) return;
 
-  const event: RoomEvent = {
-    type: "chat",
-    roomId,
-    id: `chat_${crypto.randomUUID()}`,
-    sender: { id: state.user.id, name: state.user.name },
-    text,
-    createdAt: new Date().toISOString(),
-  };
+  void (async () => {
+    try {
+      const inserted = await db
+        .insert(schema.roomMessage)
+        .values({
+          id: `msg_${crypto.randomUUID()}`,
+          roomId,
+          userId: state.user.id,
+          text,
+        })
+        .returning({
+          id: schema.roomMessage.id,
+          createdAt: schema.roomMessage.createdAt,
+        });
 
-  for (const socket of connections.keys()) {
-    safeSend(socket, event);
-  }
+      const row = inserted.at(0);
+      const messageId = row?.id ?? `msg_${crypto.randomUUID()}`;
+      const createdAt = (row?.createdAt ?? new Date()).toISOString();
+
+      const event: RoomRealtimeEvent = {
+        type: "chat",
+        roomId,
+        id: messageId,
+        sender: { id: state.user.id, name: state.user.name },
+        text,
+        createdAt,
+      };
+
+      for (const socket of connections.keys()) {
+        safeSend(socket, event);
+      }
+    } catch {
+      // ignore persistence failures for now
+    }
+  })();
 }
 
 function startHeartbeatLoop() {

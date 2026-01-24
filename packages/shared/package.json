@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./rooms": "./src/rooms.ts"
+    "./rooms": "./src/rooms.ts",
+    "./room-realtime": "./src/room-realtime.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

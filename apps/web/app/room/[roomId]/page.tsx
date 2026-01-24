@@ -41,6 +41,12 @@ function toWebSocketUrl(baseUrl: string) {
   return baseUrl;
 }
 
+function isNearBottom(element: HTMLElement, threshold = 96) {
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+  );
+}
+
 function parseWsEvent(data: string): RoomRealtimeEvent | null {
   let payload: unknown;
   try {
@@ -104,6 +110,35 @@ function parseWsEvent(data: string): RoomRealtimeEvent | null {
   return null;
 }
 
+function insertRoomMessage(
+  messages: RoomChatMessage[],
+  message: RoomChatMessage
+) {
+  if (messages.some((m) => m.id === message.id)) return messages;
+
+  const last = messages.at(-1);
+  if (!last) return [message];
+
+  const lastAt = Date.parse(last.createdAt);
+  const nextAt = Date.parse(message.createdAt);
+  if (!Number.isFinite(lastAt) || !Number.isFinite(nextAt)) {
+    return [...messages, message];
+  }
+
+  if (nextAt >= lastAt) return [...messages, message];
+
+  let lo = 0;
+  let hi = messages.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const midAt = Date.parse(messages[mid].createdAt);
+    if (!Number.isFinite(midAt) || midAt < nextAt) lo = mid + 1;
+    else hi = mid;
+  }
+
+  return [...messages.slice(0, lo), message, ...messages.slice(lo)];
+}
+
 export default function RoomPage() {
   const routeParams = useParams<{ roomId?: string | string[] }>();
   const roomId = useMemo(() => {
@@ -128,6 +163,7 @@ export default function RoomPage() {
   const [messageDraft, setMessageDraft] = useState("");
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const shouldStickToBottomRef = useRef(true);
 
   const sessionUserId = session?.user?.id ?? null;
 
@@ -225,16 +261,8 @@ export default function RoomPage() {
               | undefined
           ) => {
             const existing = current?.messages ?? [];
-            if (existing.some((m) => m.id === message.id)) {
-              return current ?? { messages: existing, nextCursor: null };
-            }
-
-            const next = [...existing, message].sort(
-              (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
-            );
-
             return {
-              messages: next,
+              messages: insertRoomMessage(existing, message),
               nextCursor: current?.nextCursor ?? null,
             };
           }
@@ -259,8 +287,19 @@ export default function RoomPage() {
   useEffect(() => {
     const el = chatScrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!shouldStickToBottomRef.current && !isNearBottom(el)) return;
+    shouldStickToBottomRef.current = true;
+
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    });
   }, [messages.length]);
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    shouldStickToBottomRef.current = isNearBottom(el);
+  }, []);
 
   const filteredParticipants = useMemo(() => {
     const q = normalizeText(deferredParticipantQuery);
@@ -461,6 +500,7 @@ export default function RoomPage() {
                   <div
                     ref={chatScrollRef}
                     className="border-border/70 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border bg-white/80 p-4 shadow-inner"
+                    onScroll={handleChatScroll}
                   >
                     {!sessionUserId ? (
                       <div className="text-muted-foreground text-sm">
