@@ -19,8 +19,8 @@ import PrimaryNav from "@/components/layout/primary-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateRoom } from "@/hooks/use-create-room";
+import { useFetchRoomList } from "@/hooks/use-fetch-room-list";
 import { useJoinRoom } from "@/hooks/use-join-room";
-import { useRooms } from "@/hooks/use-rooms";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
 import { normalizeText } from "@/utils/string-utils";
@@ -50,7 +50,7 @@ export default function DiscoverPage() {
     rooms,
     isFetching: isRoomsFetching,
     refresh: refreshRooms,
-  } = useRooms();
+  } = useFetchRoomList();
 
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
 
