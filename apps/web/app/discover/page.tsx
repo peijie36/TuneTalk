@@ -16,8 +16,6 @@ import type { RoomSummary } from "@tunetalk/shared/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
-import CreateRoomModal from "@/components/rooms/create-room-modal";
-import JoinPrivateRoomModal from "@/components/rooms/join-private-room-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateRoom } from "@/hooks/use-create-room";
@@ -27,8 +25,10 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
 import { normalizeText } from "@/utils/string-utils";
 
-import RoomRow from "./room-row";
-import ServerInfoPanel from "./server-info-panel";
+import CreateRoomModal from "./_components/create-room-modal";
+import JoinPrivateRoomModal from "./_components/join-private-room-modal";
+import RoomRow from "./_components/room-row";
+import ServerInfoPanel from "./_components/server-info-panel";
 
 type RoomFilter = "all" | "public" | "private";
 
