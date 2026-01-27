@@ -15,7 +15,7 @@ interface RoomsResult {
 
 const ROOMS_QUERY_KEY = ["rooms"] as const;
 
-export function useRooms(): RoomsResult {
+export function useFetchRoomList(): RoomsResult {
   const queryClient = useQueryClient();
 
   const query = useQuery({
