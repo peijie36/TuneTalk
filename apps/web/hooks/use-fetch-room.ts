@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getRoom } from "@/api/rooms";
 
-export function useRoom(roomId: string) {
+export function useFetchRoom(roomId: string) {
   return useQuery({
     queryKey: ["room", roomId],
     queryFn: ({ signal }) => getRoom(roomId, { signal }),
