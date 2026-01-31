@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { RefreshCcw, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import type { RoomSummary } from "@tunetalk/shared/rooms";
 
@@ -59,7 +60,6 @@ export default function DiscoverPage() {
   const [filter, setFilter] = useState<RoomFilter>("all");
   const [pageIndex, setPageIndex] = useState(0);
   const createRoom = useCreateRoom();
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const joinRoom = useJoinRoom();
   const [joinModalRoomId, setJoinModalRoomId] = useState<string | null>(null);
@@ -145,25 +145,19 @@ export default function DiscoverPage() {
   }, [filter, deferredQuery]);
 
   useEffect(() => {
-    const toast = searchParams.get("toast");
-    if (!toast) return;
+    const toastKey = searchParams.get("toast");
+    if (!toastKey) return;
 
-    if (toast === "disbanded") {
-      setToastMessage("The host disbanded the room.");
-    } else if (toast === "room_not_found") {
-      setToastMessage("That room no longer exists.");
-    } else if (toast === "password_required") {
-      setToastMessage("This room is private. Enter the password to join.");
+    if (toastKey === "disbanded") {
+      toast.message("The host disbanded the room.");
+    } else if (toastKey === "room_not_found") {
+      toast.error("That room no longer exists.");
+    } else if (toastKey === "password_required") {
+      toast.message("This room is private. Enter the password to join.");
     }
 
     window.history.replaceState(null, "", "/discover");
-  }, [router, searchParams]);
-
-  useEffect(() => {
-    if (!toastMessage) return;
-    const timeout = window.setTimeout(() => setToastMessage(null), 4500);
-    return () => window.clearTimeout(timeout);
-  }, [toastMessage]);
+  }, [searchParams]);
 
   useEffect(() => {
     if (pageCount === 0) return;
@@ -209,7 +203,7 @@ export default function DiscoverPage() {
             return;
           }
 
-          setToastMessage(result.error);
+          toast.error(result.error);
           return;
         }
 
@@ -479,29 +473,6 @@ export default function DiscoverPage() {
           </div>
         </section>
       </main>
-
-      {toastMessage ? (
-        <div className="fixed top-4 right-4 z-50 w-full max-w-sm px-4 sm:px-0">
-          <div
-            role="status"
-            className="border-border/70 rounded-2xl border bg-white/85 px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)] backdrop-blur"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-text-strong text-sm font-medium">
-                {toastMessage}
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setToastMessage(null)}
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <CreateRoomModal
         open={createRoom.open}
