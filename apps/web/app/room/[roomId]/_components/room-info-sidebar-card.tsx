@@ -11,32 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
+import {
+  getRoomWsStatusDotClass,
+  getRoomWsStatusLabel,
+} from "@/utils/room-ws-status";
 import { getInitials } from "@/utils/string-utils";
 
 import type { RoomWebSocketStatus } from "@/hooks/use-room-realtime";
-
-function getWsStatusLabel(
-  wsStatus: RoomWebSocketStatus,
-  sessionUserId: string | null
-) {
-  if (!sessionUserId) return "Sign in to connect";
-  if (wsStatus === "connected") return "Connected";
-  if (wsStatus === "connecting") return "Connecting...";
-  if (wsStatus === "offline") return "Offline";
-  if (wsStatus === "disconnected") return "Disconnected";
-  return "Not connected";
-}
-
-function getWsStatusDotClass(
-  wsStatus: RoomWebSocketStatus,
-  sessionUserId: string | null
-) {
-  if (!sessionUserId) return "bg-muted-foreground/50";
-  if (wsStatus === "connected") return "bg-emerald-500";
-  if (wsStatus === "offline") return "bg-amber-500";
-  if (wsStatus === "disconnected") return "bg-rose-500";
-  return "bg-sky-500";
-}
 
 interface RoomInfoSidebarCardProps {
   roomId: string;
@@ -95,8 +76,8 @@ export default function RoomInfoSidebarCard({
     return () => window.clearTimeout(timeout);
   }, [inviteFeedback]);
 
-  const wsStatusLabel = getWsStatusLabel(wsStatus, sessionUserId);
-  const wsStatusDotClass = getWsStatusDotClass(wsStatus, sessionUserId);
+  const wsStatusLabel = getRoomWsStatusLabel(wsStatus, sessionUserId);
+  const wsStatusDotClass = getRoomWsStatusDotClass(wsStatus, sessionUserId);
 
   return (
     <Card className="bg-surface/80 border-border/70 flex flex-col rounded-[28px] border shadow-sm backdrop-blur">

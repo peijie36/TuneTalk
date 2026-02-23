@@ -1,23 +1,23 @@
-export type LobbyRole = "host" | "co_host" | "listener";
+export type RoomRole = "host" | "co_host" | "listener";
 
-export interface PlaybackState {
-  lobbyId: string;
+export interface RoomPlaybackState {
+  roomId: string;
   trackId: string;
   positionMs: number;
   isPaused: boolean;
   updatedAt: string;
 }
 
-export interface LobbyMember {
-  lobbyId: string;
+export interface RoomMember {
+  roomId: string;
   userId: string;
-  role: LobbyRole;
+  role: RoomRole;
   lastSeenAt: string;
 }
 
-export interface LobbyMessage {
+export interface RoomMessage {
   id: string;
-  lobbyId: string;
+  roomId: string;
   userId: string;
   body: string;
   createdAt: string;

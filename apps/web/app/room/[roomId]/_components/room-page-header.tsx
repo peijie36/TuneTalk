@@ -5,10 +5,10 @@ import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
 import { Input } from "@/components/ui/input";
 
-type RoomPageHeaderProps = {
+interface RoomPageHeaderProps {
   musicQuery: string;
   onMusicQueryChange: (value: string) => void;
-};
+}
 
 export default function RoomPageHeader({
   musicQuery,

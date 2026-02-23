@@ -24,7 +24,7 @@ export default function ServerInfoPanel({
       <CardContent className="flex flex-1 flex-col items-center gap-4 pt-0">
         <div className="text-muted-foreground text-sm">
           <span className="text-text-strong font-semibold">
-            {selectedRoom?.name ?? "Lobby"}
+            {selectedRoom?.name ?? "Room"}
           </span>{" "}
           <span className="text-muted-foreground">
             {selectedRoom
