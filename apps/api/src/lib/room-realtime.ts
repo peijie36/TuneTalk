@@ -110,7 +110,15 @@ export function removeRoomConnection(roomId: string, ws: WSContext) {
 }
 
 export function getRoomPresenceCount(roomId: string) {
-  return rooms.get(roomId)?.size ?? 0;
+  const connections = rooms.get(roomId);
+  if (!connections) return 0;
+
+  const uniqueUserIds = new Set<string>();
+  for (const { user } of connections.values()) {
+    uniqueUserIds.add(user.id);
+  }
+
+  return uniqueUserIds.size;
 }
 
 export function broadcastRoomDisbanded(roomId: string) {

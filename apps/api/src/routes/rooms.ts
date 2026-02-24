@@ -263,11 +263,17 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
         cursorMessage
           ? and(
               eq(schema.roomMessage.roomId, roomId),
-              lt(schema.roomMessage.createdAt, cursorMessage.createdAt)
+              or(
+                lt(schema.roomMessage.createdAt, cursorMessage.createdAt),
+                and(
+                  eq(schema.roomMessage.createdAt, cursorMessage.createdAt),
+                  lt(schema.roomMessage.id, cursorId)
+                )
+              )
             )
           : eq(schema.roomMessage.roomId, roomId)
       )
-      .orderBy(desc(schema.roomMessage.createdAt))
+      .orderBy(desc(schema.roomMessage.createdAt), desc(schema.roomMessage.id))
       .limit(limit);
 
     const messages = rows
