@@ -75,7 +75,11 @@ export default function RoomPage() {
     sessionUserId,
     onChatError: setChatError,
     onAnnouncement: setLiveAnnouncement,
-    onAccessRequired: () => {
+    onAccessRequired: (reason) => {
+      if (reason === "Join room before connecting") {
+        router.replace("/discover?toast=join_required");
+        return;
+      }
       router.replace("/discover?toast=password_required");
     },
   });

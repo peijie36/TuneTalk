@@ -41,7 +41,7 @@ export function useRoomRealtime({
   sessionUserId: string | null;
   onChatError?: (message: string) => void;
   onAnnouncement?: (message: string) => void;
-  onAccessRequired?: () => void;
+  onAccessRequired?: (reason: string) => void;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -207,10 +207,15 @@ export function useRoomRealtime({
       setParticipants([]);
 
       if (event.code === 1008) {
+        const reason = event.reason || "Room access required.";
         setWsStatus("disconnected");
-        setWsStatusDetail("Room access required.");
-        onChatError?.("Room access required. Join again to chat.");
-        onAccessRequired?.();
+        setWsStatusDetail(reason);
+        onChatError?.(
+          reason === "Join room before connecting"
+            ? "Join the room from Discover first."
+            : "Room access required. Join again to chat."
+        );
+        onAccessRequired?.(reason);
         return;
       }
 

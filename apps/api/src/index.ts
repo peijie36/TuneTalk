@@ -92,22 +92,23 @@ app.get(
             return;
           }
 
-          if (!room.isPublic) {
-            const membership = await db
-              .select({ roomId: schema.roomMember.roomId })
-              .from(schema.roomMember)
-              .where(
-                and(
-                  eq(schema.roomMember.roomId, roomId),
-                  eq(schema.roomMember.userId, user.id)
-                )
+          const membership = await db
+            .select({ roomId: schema.roomMember.roomId })
+            .from(schema.roomMember)
+            .where(
+              and(
+                eq(schema.roomMember.roomId, roomId),
+                eq(schema.roomMember.userId, user.id)
               )
-              .limit(1);
+            )
+            .limit(1);
 
-            if (membership.length === 0) {
-              ws.close(1008, "Forbidden");
-              return;
-            }
+          if (membership.length === 0) {
+            ws.close(
+              1008,
+              room.isPublic ? "Join room before connecting" : "Forbidden"
+            );
+            return;
           }
 
           const name =

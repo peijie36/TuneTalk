@@ -152,6 +152,8 @@ export default function DiscoverPage() {
       toast.message("The host disbanded the room.");
     } else if (toastKey === "room_not_found") {
       toast.error("That room no longer exists.");
+    } else if (toastKey === "join_required") {
+      toast.message("Join the room from Discover before opening it.");
     } else if (toastKey === "password_required") {
       toast.message("This room is private. Enter the password to join.");
     }

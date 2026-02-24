@@ -5,7 +5,7 @@ import {
   type RoomSummary,
 } from "@tunetalk/shared/rooms";
 import argon2 from "argon2";
-import { and, desc, eq, ilike, lt } from "drizzle-orm";
+import { and, desc, eq, ilike, lt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -264,46 +264,102 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
     if (!user) return c.json({ error: "Unauthorized" }, 401);
 
     const roomId = c.req.param("roomId");
-
-    const roomRow = await db
-      .select({
-        id: schema.room.id,
-        isPublic: schema.room.isPublic,
-        passwordHash: schema.room.passwordHash,
-      })
-      .from(schema.room)
-      .where(eq(schema.room.id, roomId))
-      .limit(1);
-
-    const room = roomRow.at(0);
-    if (!room) return c.json({ error: "Room not found" }, 404);
-
-    if (!room.isPublic) {
-      const jsonBody: unknown = await c.req.json().catch(() => ({}));
-      const body = joinRoomSchema.safeParse(jsonBody);
-      if (!body.success) {
-        return c.json(
-          { error: body.error.issues.at(0)?.message ?? "Invalid body" },
-          400
-        );
-      }
-
-      if (!body.data.password) {
-        return c.json({ error: "Password is required." }, 400);
-      }
-
-      if (!room.passwordHash) {
-        return c.json({ error: "Room password is not configured." }, 500);
-      }
-
-      const ok = await argon2.verify(room.passwordHash, body.data.password);
-      if (!ok) return c.json({ error: "Incorrect password." }, 403);
+    const jsonBody: unknown = await c.req.json().catch(() => ({}));
+    const body = joinRoomSchema.safeParse(jsonBody);
+    if (!body.success) {
+      return c.json(
+        { error: body.error.issues.at(0)?.message ?? "Invalid body" },
+        400
+      );
     }
 
-    await db
-      .insert(schema.roomMember)
-      .values({ roomId, userId: user.id, role: "member" })
-      .onConflictDoNothing();
+    const result = await db.transaction<
+      | { ok: true }
+      | { ok: false; error: string; status: 400 | 403 | 404 | 409 | 500 }
+    >(async (tx) => {
+      // Serialize joins per room to keep capacity checks race-safe.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${roomId}))`);
+
+      const roomRow = await tx
+        .select({
+          id: schema.room.id,
+          isPublic: schema.room.isPublic,
+          passwordHash: schema.room.passwordHash,
+        })
+        .from(schema.room)
+        .where(eq(schema.room.id, roomId))
+        .limit(1);
+
+      const room = roomRow.at(0);
+      if (!room)
+        return { ok: false as const, error: "Room not found", status: 404 };
+
+      if (!room.isPublic) {
+        if (!body.data.password) {
+          return {
+            ok: false as const,
+            error: "Password is required.",
+            status: 400,
+          };
+        }
+
+        if (!room.passwordHash) {
+          return {
+            ok: false as const,
+            error: "Room password is not configured.",
+            status: 500,
+          };
+        }
+
+        const passwordValid = await argon2.verify(
+          room.passwordHash,
+          body.data.password
+        );
+        if (!passwordValid) {
+          return {
+            ok: false as const,
+            error: "Incorrect password.",
+            status: 403,
+          };
+        }
+      }
+
+      const existingMembership = await tx
+        .select({ roomId: schema.roomMember.roomId })
+        .from(schema.roomMember)
+        .where(
+          and(
+            eq(schema.roomMember.roomId, roomId),
+            eq(schema.roomMember.userId, user.id)
+          )
+        )
+        .limit(1);
+
+      if (existingMembership.length > 0) return { ok: true as const };
+
+      const countRow = await tx
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.roomMember)
+        .where(eq(schema.roomMember.roomId, roomId))
+        .limit(1);
+
+      const memberCount = Number(countRow.at(0)?.count ?? 0);
+      if (memberCount >= DEFAULT_ROOM_CAPACITY) {
+        return { ok: false as const, error: "Room is full.", status: 409 };
+      }
+
+      await tx.insert(schema.roomMember).values({
+        roomId,
+        userId: user.id,
+        role: "member",
+      });
+
+      return { ok: true as const };
+    });
+
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status);
+    }
 
     return c.json({ joined: true });
   })
