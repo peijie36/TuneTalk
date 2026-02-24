@@ -50,7 +50,10 @@ export default function DiscoverPage() {
   const {
     rooms,
     isFetching: isRoomsFetching,
+    isFetchingMore: isRoomsFetchingMore,
+    hasMore: hasMoreRooms,
     refresh: refreshRooms,
+    loadMore: loadMoreRooms,
   } = useFetchRoomList();
 
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
@@ -162,9 +165,26 @@ export default function DiscoverPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (pageCount === 0) return;
+    if (hasMoreRooms) return;
+    if (pageCount === 0) {
+      setPageIndex(0);
+      return;
+    }
     setPageIndex((current) => Math.min(current, pageCount - 1));
-  }, [pageCount]);
+  }, [hasMoreRooms, pageCount]);
+
+  useEffect(() => {
+    const requiredCount = (pageIndex + 1) * ROOMS_PER_PAGE;
+    if (filteredRooms.length >= requiredCount) return;
+    if (!hasMoreRooms || isRoomsFetchingMore) return;
+    loadMoreRooms();
+  }, [
+    filteredRooms.length,
+    hasMoreRooms,
+    isRoomsFetchingMore,
+    loadMoreRooms,
+    pageIndex,
+  ]);
 
   const pagedRooms = useMemo(() => {
     const start = pageIndex * ROOMS_PER_PAGE;
@@ -280,8 +300,15 @@ export default function DiscoverPage() {
   };
 
   const handleNextPage = () => {
-    setPageIndex((current) => Math.min(pageCount - 1, current + 1));
+    setPageIndex((current) => {
+      if (!hasMoreRooms && current >= pageCount - 1) return current;
+      return current + 1;
+    });
   };
+
+  const pageCountLabel = hasMoreRooms
+    ? `${Math.max(pageCount, pageIndex + 1)}+`
+    : String(pageCount);
 
   return (
     <div className="bg-background relative min-h-screen">
@@ -402,7 +429,7 @@ export default function DiscoverPage() {
                 )}
               </div>
 
-              {pageCount > 1 ? (
+              {pageCount > 1 || hasMoreRooms ? (
                 <nav
                   aria-label="Room pages"
                   className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
@@ -414,7 +441,7 @@ export default function DiscoverPage() {
                     </span>{" "}
                     of{" "}
                     <span className="text-text-strong font-semibold">
-                      {pageCount}
+                      {pageCountLabel}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -431,10 +458,13 @@ export default function DiscoverPage() {
                       type="button"
                       variant="secondary"
                       onClick={handleNextPage}
-                      disabled={pageIndex >= pageCount - 1}
+                      disabled={
+                        (!hasMoreRooms && pageIndex >= pageCount - 1) ||
+                        isRoomsFetchingMore
+                      }
                       className="h-10 px-5"
                     >
-                      Next
+                      {isRoomsFetchingMore ? "Loading..." : "Next"}
                     </Button>
                   </div>
                 </nav>

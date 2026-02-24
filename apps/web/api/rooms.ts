@@ -152,10 +152,18 @@ function coerceRoomMessageList(payload: unknown): RoomChatMessage[] {
 
 export async function listRooms({
   signal,
+  limit,
+  cursor,
 }: {
   signal?: AbortSignal;
-} = {}): Promise<RoomSummary[]> {
-  const response = await fetch(`${API_BASE_URL}/api/rooms`, {
+  limit?: number;
+  cursor?: string;
+} = {}): Promise<{ rooms: RoomSummary[]; nextCursor: string | null }> {
+  const url = new URL(`${API_BASE_URL}/api/rooms`);
+  if (typeof limit === "number") url.searchParams.set("limit", String(limit));
+  if (cursor) url.searchParams.set("cursor", cursor);
+
+  const response = await fetch(url.toString(), {
     method: "GET",
     credentials: "include",
     signal,
@@ -170,7 +178,17 @@ export async function listRooms({
     );
   }
 
-  return coerceRoomList(payload);
+  const nextCursor =
+    payload &&
+    typeof payload === "object" &&
+    typeof (payload as { nextCursor?: unknown }).nextCursor === "string"
+      ? (payload as { nextCursor: string }).nextCursor
+      : null;
+
+  return {
+    rooms: coerceRoomList(payload),
+    nextCursor,
+  };
 }
 
 export async function getRoom(

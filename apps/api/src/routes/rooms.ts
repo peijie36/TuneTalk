@@ -5,7 +5,7 @@ import {
   type RoomSummary,
 } from "@tunetalk/shared/rooms";
 import argon2 from "argon2";
-import { and, desc, eq, ilike, lt, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -57,48 +57,113 @@ function coerceLimit(value: string | undefined) {
   return Math.min(100, Math.max(1, Math.trunc(parsed)));
 }
 
-function coerceOffset(value: string | undefined) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.trunc(parsed));
+interface RoomListCursor {
+  id: string;
+  createdAt: Date;
+}
+
+function encodeRoomListCursor(value: { id: string; createdAt: Date }) {
+  return Buffer.from(
+    JSON.stringify({
+      id: value.id,
+      createdAt: value.createdAt.toISOString(),
+    }),
+    "utf8"
+  ).toString("base64url");
+}
+
+function parseRoomListCursor(value: string | undefined): RoomListCursor | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+
+  let parsed: unknown;
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object") return null;
+  const record = parsed as { id?: unknown; createdAt?: unknown };
+  if (typeof record.id !== "string" || typeof record.createdAt !== "string") {
+    return null;
+  }
+
+  const createdAt = new Date(record.createdAt);
+  if (Number.isNaN(createdAt.getTime())) return null;
+
+  return { id: record.id, createdAt };
 }
 
 export const roomsRoute = new Hono<HonoAuthVariables>()
   .get("/", async (c) => {
     const limit = coerceLimit(c.req.query("limit"));
-    const offset = coerceOffset(c.req.query("offset"));
     const q = (c.req.query("q") ?? "").trim();
+    const cursorRaw = c.req.query("cursor");
+    const cursor = parseRoomListCursor(cursorRaw);
+    if ((cursorRaw ?? "").trim() && !cursor) {
+      return c.json({ error: "Invalid cursor." }, 400);
+    }
 
-    const rooms = await db.query.room.findMany({
-      where: q ? (room) => ilike(room.name, `%${q}%`) : undefined,
-      with: {
-        createdByUser: {
-          columns: {
-            name: true,
-          },
-        },
-      },
-      orderBy: (room, { desc }) => [desc(room.createdAt)],
-      limit,
-      offset,
-    });
+    const filters = [
+      q ? ilike(schema.room.name, `%${q}%`) : null,
+      cursor
+        ? or(
+            lt(schema.room.createdAt, cursor.createdAt),
+            and(
+              eq(schema.room.createdAt, cursor.createdAt),
+              lt(schema.room.id, cursor.id)
+            )
+          )
+        : null,
+    ].filter((condition): condition is NonNullable<typeof condition> =>
+      Boolean(condition)
+    );
 
-    const result = rooms.map((room) =>
+    const rows = await db
+      .select({
+        id: schema.room.id,
+        name: schema.room.name,
+        createdAt: schema.room.createdAt,
+        isPublic: schema.room.isPublic,
+        hostName: schema.user.name,
+      })
+      .from(schema.room)
+      .leftJoin(schema.user, eq(schema.user.id, schema.room.createdByUserId))
+      .where(
+        filters.length === 0
+          ? undefined
+          : filters.length === 1
+            ? filters[0]
+            : and(...filters)
+      )
+      .orderBy(desc(schema.room.createdAt), desc(schema.room.id))
+      .limit(limit);
+
+    const result = rows.map((row) =>
       formatRoomSummary({
-        id: room.id,
-        name: room.name,
-        createdAt: room.createdAt,
-        isPublic: room.isPublic,
-        hostName: room.createdByUser.name,
-        presenceCount: getRoomPresenceCount(room.id),
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        isPublic: row.isPublic,
+        hostName: row.hostName,
+        presenceCount: getRoomPresenceCount(row.id),
       })
     );
+
+    const nextCursor =
+      rows.length === limit
+        ? encodeRoomListCursor({
+            id: rows.at(-1)!.id,
+            createdAt: rows.at(-1)!.createdAt,
+          })
+        : null;
 
     return c.json({
       rooms: result,
       limit,
-      offset,
-      nextOffset: offset + result.length,
+      nextCursor,
     });
   })
   .get("/:roomId", async (c) => {
