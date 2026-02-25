@@ -181,18 +181,19 @@ export function useRoomRealtime({
                 pageParams: [undefined],
               } satisfies InfiniteData<RoomMessagesPage>);
 
-            const nextPages = base.pages.map((page) => ({
-              ...page,
-              messages: page.messages.filter((m) => m.id !== message.id),
-            }));
+            const nextPages =
+              base.pages.length > 0
+                ? [...base.pages]
+                : [{ messages: [], nextCursor: null }];
 
-            if (nextPages.length === 0) {
-              nextPages.push({ messages: [], nextCursor: null });
+            const firstPage = nextPages[0];
+            if (firstPage.messages.some((m) => m.id === message.id)) {
+              return base;
             }
 
             nextPages[0] = {
-              ...nextPages[0],
-              messages: insertRoomMessage(nextPages[0].messages, message),
+              ...firstPage,
+              messages: insertRoomMessage(firstPage.messages, message),
             };
 
             return { ...base, pages: nextPages };
