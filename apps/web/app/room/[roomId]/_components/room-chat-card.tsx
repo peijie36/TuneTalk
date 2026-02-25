@@ -36,7 +36,7 @@ function ChatHeader({
   wsStatus: RoomWebSocketStatus;
 }) {
   return (
-    <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
+    <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
       <CardTitle className="text-text-strong text-base font-semibold">
         Chat
       </CardTitle>
@@ -354,11 +354,11 @@ function ChatComposer({
       />
       <Button
         type="button"
-        className="h-12 w-12 rounded-full"
+        className="h-13 w-13 rounded-full"
         onClick={handleSend}
         disabled={!canSendChat || !messageDraft.trim()}
       >
-        <Send className="h-4 w-4" aria-hidden="true" />
+        <Send aria-hidden="true" />
       </Button>
     </div>
   );
@@ -415,7 +415,7 @@ export default function RoomChatCard({
     <Card className="border-border/70 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
       <ChatHeader sessionUserId={sessionUserId} wsStatus={wsStatus} />
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pt-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 pt-0">
         {isRoomNotFound ? (
           <div className="space-y-3 rounded-2xl border border-white/30 bg-white/15 p-4">
             <p className="text-text-strong text-sm font-semibold">
