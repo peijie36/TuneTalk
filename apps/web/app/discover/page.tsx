@@ -12,8 +12,6 @@ import {
 import { RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
-import type { RoomSummary } from "@tunetalk/shared/rooms";
-
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -24,7 +22,6 @@ import { useFetchRoomList } from "@/hooks/use-fetch-room-list";
 import { useJoinRoom } from "@/hooks/use-join-room";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/utils/cn";
-import { normalizeText } from "@/utils/string-utils";
 
 import CreateRoomModal from "./_components/create-room-modal";
 import JoinPrivateRoomModal from "./_components/join-private-room-modal";
@@ -47,6 +44,11 @@ export default function DiscoverPage() {
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
 
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [filter, setFilter] = useState<RoomFilter>("all");
+  const [pageIndex, setPageIndex] = useState(0);
+
   const {
     rooms,
     isFetching: isRoomsFetching,
@@ -54,14 +56,13 @@ export default function DiscoverPage() {
     hasMore: hasMoreRooms,
     refresh: refreshRooms,
     loadMore: loadMoreRooms,
-  } = useFetchRoomList();
+  } = useFetchRoomList({
+    query: deferredQuery,
+    visibility: filter,
+    pageSize: ROOMS_PER_PAGE,
+  });
 
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
-
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const [filter, setFilter] = useState<RoomFilter>("all");
-  const [pageIndex, setPageIndex] = useState(0);
   const createRoom = useCreateRoom();
 
   const joinRoom = useJoinRoom();
@@ -95,22 +96,6 @@ export default function DiscoverPage() {
     if (!exists) setSelectedRoomId(firstRoomId);
   }, [rooms, selectedRoomId]);
 
-  const roomSearchIndex = useMemo(() => {
-    return new Map(
-      rooms.map((room) => [
-        room.id,
-        normalizeText(
-          [
-            room.name,
-            room.host.name,
-            room.nowPlaying.title,
-            room.nowPlaying.artist,
-          ].join(" ")
-        ),
-      ])
-    );
-  }, [rooms]);
-
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
@@ -121,27 +106,10 @@ export default function DiscoverPage() {
     selectedRoom.participants.current < selectedRoom.participants.capacity &&
     !isSessionPending;
 
-  const filteredRooms = useMemo(() => {
-    const q = normalizeText(deferredQuery);
-
-    if (!q && filter === "all") return rooms;
-
-    const matchesFilter = (room: RoomSummary) => {
-      if (filter === "public") return room.visibility === "public";
-      if (filter === "private") return room.visibility === "private";
-      return true;
-    };
-
-    const matchesQuery = (room: RoomSummary) =>
-      !q || (roomSearchIndex.get(room.id) ?? "").includes(q);
-
-    return rooms.filter((room) => matchesFilter(room) && matchesQuery(room));
-  }, [deferredQuery, filter, roomSearchIndex, rooms]);
-
   const pageCount = useMemo(() => {
-    if (filteredRooms.length === 0) return 0;
-    return Math.ceil(filteredRooms.length / ROOMS_PER_PAGE);
-  }, [filteredRooms.length]);
+    if (rooms.length === 0) return 0;
+    return Math.ceil(rooms.length / ROOMS_PER_PAGE);
+  }, [rooms.length]);
 
   useEffect(() => {
     setPageIndex(0);
@@ -175,11 +143,11 @@ export default function DiscoverPage() {
 
   useEffect(() => {
     const requiredCount = (pageIndex + 1) * ROOMS_PER_PAGE;
-    if (filteredRooms.length >= requiredCount) return;
+    if (rooms.length >= requiredCount) return;
     if (!hasMoreRooms || isRoomsFetchingMore) return;
     loadMoreRooms();
   }, [
-    filteredRooms.length,
+    rooms.length,
     hasMoreRooms,
     isRoomsFetchingMore,
     loadMoreRooms,
@@ -188,8 +156,8 @@ export default function DiscoverPage() {
 
   const pagedRooms = useMemo(() => {
     const start = pageIndex * ROOMS_PER_PAGE;
-    return filteredRooms.slice(start, start + ROOMS_PER_PAGE);
-  }, [filteredRooms, pageIndex]);
+    return rooms.slice(start, start + ROOMS_PER_PAGE);
+  }, [rooms, pageIndex]);
 
   const handleReset = () => {
     setQuery("");
@@ -398,7 +366,7 @@ export default function DiscoverPage() {
 
             <div className="space-y-5 lg:col-start-2 lg:row-start-2">
               <div className="space-y-4">
-                {filteredRooms.length === 0 ? (
+                {rooms.length === 0 ? (
                   <div className="border-border/70 rounded-[26px] border bg-white/70 backdrop-blur">
                     <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
                       <p className="text-text-strong text-base font-semibold">

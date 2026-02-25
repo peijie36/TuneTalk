@@ -6,6 +6,8 @@ import { useCallback, useMemo } from "react";
 import { ApiError, listRooms } from "@/api/rooms";
 import type { RoomSummary } from "@tunetalk/shared/rooms";
 
+type RoomFilter = "all" | "public" | "private";
+
 interface RoomsResult {
   rooms: RoomSummary[];
   isFetching: boolean;
@@ -16,19 +18,28 @@ interface RoomsResult {
   loadMore: () => void;
 }
 
-const ROOMS_QUERY_KEY = ["rooms"] as const;
-const ROOM_PAGE_LIMIT = 50;
-
-export function useFetchRoomList(): RoomsResult {
+export function useFetchRoomList({
+  query: searchQuery,
+  visibility,
+  pageSize = 5,
+}: {
+  query: string;
+  visibility: RoomFilter;
+  pageSize?: number;
+}): RoomsResult {
   const queryClient = useQueryClient();
+  const normalizedQuery = searchQuery.trim();
+  const queryKey = ["rooms", normalizedQuery, visibility, pageSize] as const;
 
   const query = useInfiniteQuery({
-    queryKey: ROOMS_QUERY_KEY,
+    queryKey,
     queryFn: ({ pageParam, signal }) =>
       listRooms({
         signal,
-        limit: ROOM_PAGE_LIMIT,
+        limit: pageSize,
         cursor: typeof pageParam === "string" ? pageParam : undefined,
+        q: normalizedQuery || undefined,
+        visibility,
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -37,8 +48,8 @@ export function useFetchRoomList(): RoomsResult {
   });
 
   const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ROOMS_QUERY_KEY });
-  }, [queryClient]);
+    void queryClient.invalidateQueries({ queryKey });
+  }, [queryClient, queryKey]);
 
   const loadMore = useCallback(() => {
     if (!query.hasNextPage || query.isFetchingNextPage) return;

@@ -3,6 +3,7 @@ import * as schema from "@tunetalk/db/schema";
 import {
   DEFAULT_ROOM_CAPACITY,
   type RoomSummary,
+  type RoomVisibility,
 } from "@tunetalk/shared/rooms";
 import argon2 from "argon2";
 import { and, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
@@ -96,10 +97,20 @@ function parseRoomListCursor(value: string | undefined): RoomListCursor | null {
   return { id: record.id, createdAt };
 }
 
+function parseRoomVisibility(value: string | undefined): RoomVisibility | null {
+  if (value === "public" || value === "private") return value;
+  return null;
+}
+
 export const roomsRoute = new Hono<HonoAuthVariables>()
   .get("/", async (c) => {
     const limit = coerceLimit(c.req.query("limit"));
     const q = (c.req.query("q") ?? "").trim();
+    const visibilityRaw = (c.req.query("visibility") ?? "").trim();
+    const visibility = parseRoomVisibility(visibilityRaw || undefined);
+    if (visibilityRaw && !visibility) {
+      return c.json({ error: "Invalid visibility filter." }, 400);
+    }
     const cursorRaw = c.req.query("cursor");
     const cursor = parseRoomListCursor(cursorRaw);
     if ((cursorRaw ?? "").trim() && !cursor) {
@@ -108,6 +119,7 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
 
     const filters = [
       q ? ilike(schema.room.name, `%${q}%`) : null,
+      visibility ? eq(schema.room.isPublic, visibility === "public") : null,
       cursor
         ? or(
             lt(schema.room.createdAt, cursor.createdAt),

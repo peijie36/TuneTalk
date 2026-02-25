@@ -94,9 +94,7 @@ function coerceRoomList(payload: unknown): RoomSummary[] {
     if (room) rooms.push(room);
   }
 
-  return rooms.sort(
-    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
-  );
+  return rooms;
 }
 
 function coerceRoomMessage(value: unknown): RoomChatMessage | null {
@@ -154,14 +152,22 @@ export async function listRooms({
   signal,
   limit,
   cursor,
+  q,
+  visibility,
 }: {
   signal?: AbortSignal;
   limit?: number;
   cursor?: string;
+  q?: string;
+  visibility?: "all" | "public" | "private";
 } = {}): Promise<{ rooms: RoomSummary[]; nextCursor: string | null }> {
   const url = new URL(`${API_BASE_URL}/api/rooms`);
   if (typeof limit === "number") url.searchParams.set("limit", String(limit));
   if (cursor) url.searchParams.set("cursor", cursor);
+  if (q?.trim()) url.searchParams.set("q", q.trim());
+  if (visibility && visibility !== "all") {
+    url.searchParams.set("visibility", visibility);
+  }
 
   const response = await fetch(url.toString(), {
     method: "GET",

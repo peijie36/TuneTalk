@@ -20,6 +20,7 @@ const rooms = new Map<
     }
   >
 >();
+const roomUserConnectionCounts = new Map<string, Map<string, number>>();
 const chatRateLimits = new Map<
   string,
   { windowStartMs: number; count: number }
@@ -46,6 +47,26 @@ function safeSend(ws: WSContext, event: RoomRealtimeEvent) {
   } catch {
     // ignore
   }
+}
+
+function incrementRoomUserConnection(roomId: string, userId: string) {
+  const perRoom =
+    roomUserConnectionCounts.get(roomId) ?? new Map<string, number>();
+  perRoom.set(userId, (perRoom.get(userId) ?? 0) + 1);
+  roomUserConnectionCounts.set(roomId, perRoom);
+}
+
+function decrementRoomUserConnection(roomId: string, userId: string) {
+  const perRoom = roomUserConnectionCounts.get(roomId);
+  if (!perRoom) return;
+
+  const count = perRoom.get(userId);
+  if (!count) return;
+
+  if (count <= 1) perRoom.delete(userId);
+  else perRoom.set(userId, count - 1);
+
+  if (perRoom.size === 0) roomUserConnectionCounts.delete(roomId);
 }
 
 function getPresence(roomId: string) {
@@ -93,7 +114,12 @@ export function addRoomConnection(
         user: { id: string; name: string; role: "host" | "member" };
       }
     >();
+  const existing = connections.get(ws);
+  if (existing) {
+    decrementRoomUserConnection(roomId, existing.user.id);
+  }
   connections.set(ws, { lastSeenAt: now, lastPingAt: 0, user });
+  incrementRoomUserConnection(roomId, user.id);
   rooms.set(roomId, connections);
   broadcastPresence(roomId);
 }
@@ -101,29 +127,29 @@ export function addRoomConnection(
 export function removeRoomConnection(roomId: string, ws: WSContext) {
   const connections = rooms.get(roomId);
   if (!connections) return;
+  const state = connections.get(ws);
+  if (state) {
+    decrementRoomUserConnection(roomId, state.user.id);
+  }
   connections.delete(ws);
   if (connections.size === 0) {
     rooms.delete(roomId);
+    roomUserConnectionCounts.delete(roomId);
     return;
   }
   broadcastPresence(roomId);
 }
 
 export function getRoomPresenceCount(roomId: string) {
-  const connections = rooms.get(roomId);
-  if (!connections) return 0;
-
-  const uniqueUserIds = new Set<string>();
-  for (const { user } of connections.values()) {
-    uniqueUserIds.add(user.id);
-  }
-
-  return uniqueUserIds.size;
+  return roomUserConnectionCounts.get(roomId)?.size ?? 0;
 }
 
 export function broadcastRoomDisbanded(roomId: string) {
   const connections = rooms.get(roomId);
-  if (!connections) return;
+  if (!connections) {
+    roomUserConnectionCounts.delete(roomId);
+    return;
+  }
 
   for (const ws of connections.keys()) {
     safeSend(ws, { type: "room_disbanded", roomId });
@@ -135,6 +161,7 @@ export function broadcastRoomDisbanded(roomId: string) {
   }
 
   rooms.delete(roomId);
+  roomUserConnectionCounts.delete(roomId);
 }
 
 export function handleRoomMessage(
@@ -235,6 +262,7 @@ function startHeartbeatLoop() {
     for (const [roomId, connections] of rooms) {
       for (const [ws, state] of connections) {
         if (ws.readyState !== WS_OPEN_STATE) {
+          decrementRoomUserConnection(roomId, state.user.id);
           connections.delete(ws);
           continue;
         }
@@ -245,6 +273,7 @@ function startHeartbeatLoop() {
           } catch {
             // ignore
           }
+          decrementRoomUserConnection(roomId, state.user.id);
           connections.delete(ws);
           continue;
         }
@@ -255,7 +284,10 @@ function startHeartbeatLoop() {
         }
       }
 
-      if (connections.size === 0) rooms.delete(roomId);
+      if (connections.size === 0) {
+        rooms.delete(roomId);
+        roomUserConnectionCounts.delete(roomId);
+      }
     }
   }, HEARTBEAT_INTERVAL_MS);
 }
