@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Copy, Link2, LogOut, Users } from "lucide-react";
 
@@ -53,22 +53,20 @@ export default function RoomInfoSidebarCard({
   isLeaving,
 }: RoomInfoSidebarCardProps) {
   const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
-
-  const inviteLink = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    if (!roomId || roomId === "unknown") return "";
-    return `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
-  }, [roomId]);
+  const canCopyInvite = !!roomId && roomId !== "unknown";
 
   const handleCopyInvite = useCallback(async () => {
-    if (!inviteLink) return;
+    if (!canCopyInvite) return;
+
+    const inviteLink = `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
+
     try {
       await navigator.clipboard.writeText(inviteLink);
       setInviteFeedback("Invite link copied.");
     } catch {
       setInviteFeedback("Could not copy invite link.");
     }
-  }, [inviteLink]);
+  }, [canCopyInvite, roomId]);
 
   useEffect(() => {
     if (!inviteFeedback) return;
@@ -87,7 +85,7 @@ export default function RoomInfoSidebarCard({
             {roomName}
           </CardTitle>
           <div className="flex items-center gap-2">
-            {inviteLink ? (
+            {canCopyInvite ? (
               <Button
                 type="button"
                 variant="secondary"
