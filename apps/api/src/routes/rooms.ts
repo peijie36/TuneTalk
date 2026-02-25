@@ -102,6 +102,47 @@ function parseRoomVisibility(value: string | undefined): RoomVisibility | null {
   return null;
 }
 
+interface RoomMessageCursor {
+  id: string;
+  createdAt: Date;
+}
+
+function encodeRoomMessageCursor(value: { id: string; createdAt: Date }) {
+  return Buffer.from(
+    JSON.stringify({
+      id: value.id,
+      createdAt: value.createdAt.toISOString(),
+    }),
+    "utf8"
+  ).toString("base64url");
+}
+
+function parseRoomMessageCursor(
+  value: string | undefined
+): RoomMessageCursor | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+
+  let parsed: unknown;
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object") return null;
+  const record = parsed as { id?: unknown; createdAt?: unknown };
+  if (typeof record.id !== "string" || typeof record.createdAt !== "string") {
+    return null;
+  }
+
+  const createdAt = new Date(record.createdAt);
+  if (Number.isNaN(createdAt.getTime())) return null;
+
+  return { id: record.id, createdAt };
+}
+
 export const roomsRoute = new Hono<HonoAuthVariables>()
   .get("/", async (c) => {
     const limit = coerceLimit(c.req.query("limit"));
@@ -228,7 +269,11 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       ? Math.min(100, Math.max(1, Math.trunc(limitParsed)))
       : 50;
 
-    const cursorId = (c.req.query("cursor") ?? "").trim();
+    const cursorRaw = c.req.query("cursor");
+    const cursor = parseRoomMessageCursor(cursorRaw);
+    if ((cursorRaw ?? "").trim() && !cursor) {
+      return c.json({ error: "Invalid cursor." }, 400);
+    }
 
     const room = await db.query.room.findFirst({
       where: (room, { eq }) => eq(room.id, roomId),
@@ -252,15 +297,6 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       if (!membership) return c.json({ error: "Forbidden" }, 403);
     }
 
-    const cursorMessage =
-      cursorId.length > 0
-        ? await db.query.roomMessage.findFirst({
-            where: (message, { and, eq }) =>
-              and(eq(message.id, cursorId), eq(message.roomId, roomId)),
-            columns: { createdAt: true },
-          })
-        : null;
-
     const rows = await db
       .select({
         id: schema.roomMessage.id,
@@ -272,14 +308,14 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       .from(schema.roomMessage)
       .leftJoin(schema.user, eq(schema.user.id, schema.roomMessage.userId))
       .where(
-        cursorMessage
+        cursor
           ? and(
               eq(schema.roomMessage.roomId, roomId),
               or(
-                lt(schema.roomMessage.createdAt, cursorMessage.createdAt),
+                lt(schema.roomMessage.createdAt, cursor.createdAt),
                 and(
-                  eq(schema.roomMessage.createdAt, cursorMessage.createdAt),
-                  lt(schema.roomMessage.id, cursorId)
+                  eq(schema.roomMessage.createdAt, cursor.createdAt),
+                  lt(schema.roomMessage.id, cursor.id)
                 )
               )
             )
@@ -300,7 +336,13 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       }))
       .reverse();
 
-    const nextCursor = rows.length === limit ? (rows.at(-1)?.id ?? null) : null;
+    const nextCursor =
+      rows.length === limit
+        ? encodeRoomMessageCursor({
+            id: rows.at(-1)!.id,
+            createdAt: rows.at(-1)!.createdAt,
+          })
+        : null;
 
     return c.json({ messages, nextCursor });
   })
