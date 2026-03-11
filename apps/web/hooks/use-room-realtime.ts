@@ -48,6 +48,7 @@ export function useRoomRealtime({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const accessDeniedReasonRef = useRef<string | null>(null);
 
   const [participants, setParticipants] = useState<RoomPresenceParticipant[]>(
     []
@@ -100,6 +101,12 @@ export function useRoomRealtime({
       return;
     }
 
+    if (accessDeniedReasonRef.current) {
+      setWsStatus("disconnected");
+      setWsStatusDetail(accessDeniedReasonRef.current);
+      return;
+    }
+
     clearReconnectTimer();
 
     const existing = wsRef.current;
@@ -121,6 +128,7 @@ export function useRoomRealtime({
 
     ws.addEventListener("open", () => {
       if (wsRef.current !== ws) return;
+      accessDeniedReasonRef.current = null;
       reconnectAttemptRef.current = 0;
       setWsStatus("connected");
       setWsStatusDetail(null);
@@ -209,6 +217,7 @@ export function useRoomRealtime({
 
       if (event.code === 1008) {
         const reason = event.reason || "Room access required.";
+        accessDeniedReasonRef.current = reason;
         setWsStatus("disconnected");
         setWsStatusDetail(reason);
         onChatError?.(
@@ -288,6 +297,10 @@ export function useRoomRealtime({
     },
     [enabled, sessionUserId]
   );
+
+  useEffect(() => {
+    accessDeniedReasonRef.current = null;
+  }, [roomId]);
 
   useEffect(() => {
     if (!enabled) {

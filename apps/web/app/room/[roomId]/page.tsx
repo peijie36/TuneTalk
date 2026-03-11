@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ApiError, leaveRoom } from "@/api/rooms";
 import { useFetchRoom } from "@/hooks/use-fetch-room";
@@ -31,6 +31,7 @@ export default function RoomPage() {
   const sessionUserId = session?.user?.id ?? null;
 
   const [musicQuery, setMusicQuery] = useState("");
+  const leavingIntentRef = useRef(false);
 
   const [chatError, setChatError] = useState<string | null>(null);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
@@ -52,6 +53,9 @@ export default function RoomPage() {
       if (!roomId || roomId === "unknown") throw new Error("Missing room id");
       return await leaveRoom(roomId);
     },
+    onError: () => {
+      leavingIntentRef.current = false;
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["rooms"] });
 
@@ -64,24 +68,32 @@ export default function RoomPage() {
   });
 
   const isLeaving = leaveMutation.isPending;
-  const handleLeave = useCallback(() => {
-    if (leaveMutation.isPending) return;
-    leaveMutation.mutate();
-  }, [leaveMutation]);
-
-  const { participants, wsStatus, wsStatusDetail, sendChat } = useRoomRealtime({
-    roomId,
-    enabled: roomReady,
-    sessionUserId,
-    onChatError: setChatError,
-    onAnnouncement: setLiveAnnouncement,
-    onAccessRequired: (reason) => {
+  const handleRealtimeAccessRequired = useCallback(
+    (reason: string) => {
+      if (leavingIntentRef.current) return;
       if (reason === "Join room before connecting") {
         router.replace("/discover?toast=join_required");
         return;
       }
       router.replace("/discover?toast=password_required");
     },
+    [router]
+  );
+
+  const handleLeave = useCallback(() => {
+    if (leaveMutation.isPending) return;
+    leavingIntentRef.current = true;
+    leaveMutation.mutate();
+  }, [leaveMutation]);
+
+  const realtimeEnabled = roomReady && !isLeaving;
+  const { participants, wsStatus, wsStatusDetail, sendChat } = useRoomRealtime({
+    roomId,
+    enabled: realtimeEnabled,
+    sessionUserId,
+    onChatError: setChatError,
+    onAnnouncement: setLiveAnnouncement,
+    onAccessRequired: handleRealtimeAccessRequired,
   });
 
   const roomName =
@@ -149,7 +161,7 @@ export default function RoomPage() {
 
               <RoomChatCard
                 roomId={roomId}
-                roomReady={roomReady}
+                roomReady={realtimeEnabled}
                 isRoomNotFound={isRoomNotFound}
                 requiresRoomAccess={requiresRoomAccess}
                 roomApiErrorMessage={roomApiError?.message ?? null}

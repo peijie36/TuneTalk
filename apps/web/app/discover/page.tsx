@@ -6,6 +6,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -70,6 +71,7 @@ export default function DiscoverPage() {
   const [joinModalRoomName, setJoinModalRoomName] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
+  const handledToastKeyRef = useRef<string | null>(null);
 
   const closeJoinModal = useCallback(() => {
     setJoinModalRoomId(null);
@@ -117,7 +119,13 @@ export default function DiscoverPage() {
 
   useEffect(() => {
     const toastKey = searchParams.get("toast");
-    if (!toastKey) return;
+    if (!toastKey) {
+      handledToastKeyRef.current = null;
+      return;
+    }
+
+    if (handledToastKeyRef.current === toastKey) return;
+    handledToastKeyRef.current = toastKey;
 
     if (toastKey === "disbanded") {
       toast.message("The host disbanded the room.");
