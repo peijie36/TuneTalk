@@ -13,7 +13,8 @@ import {
 
 import { user } from "./auth-schema";
 
-export const roomMemberRole = pgEnum("room_member_role", ["host", "member"]);
+export const ROOM_MEMBER_ROLES = ["host", "member"] as const;
+export const roomMemberRole = pgEnum("room_member_role", ROOM_MEMBER_ROLES);
 
 export const room = pgTable(
   "room",

@@ -5,6 +5,7 @@ import type {
   RoomPresenceParticipant,
   RoomRealtimeEvent,
 } from "@tunetalk/shared/room-realtime";
+import { isRoomMemberRole } from "@tunetalk/shared/rooms";
 
 export interface RoomMessagesPage {
   messages: RoomChatMessage[];
@@ -66,7 +67,7 @@ export function parseWsEvent(data: string): RoomRealtimeEvent | null {
       const p = item as Record<string, unknown>;
       const id = typeof p.id === "string" ? p.id : null;
       const name = typeof p.name === "string" ? p.name : null;
-      const role = p.role === "host" || p.role === "member" ? p.role : null;
+      const role = isRoomMemberRole(p.role) ? p.role : null;
       if (id && name && role) participants.push({ id, name, role });
     }
 

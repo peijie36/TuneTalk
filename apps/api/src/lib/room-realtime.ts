@@ -3,6 +3,7 @@ import type { WSContext } from "hono/ws";
 import { db } from "@tunetalk/db";
 import * as schema from "@tunetalk/db/schema";
 import type { RoomRealtimeEvent } from "@tunetalk/shared/room-realtime";
+import type { RoomMemberRole } from "@tunetalk/shared/rooms";
 
 const WS_OPEN_STATE = 1;
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -16,7 +17,7 @@ const rooms = new Map<
     {
       lastSeenAt: number;
       lastPingAt: number;
-      user: { id: string; name: string; role: "host" | "member" };
+      user: { id: string; name: string; role: RoomMemberRole };
     }
   >
 >();
@@ -75,7 +76,7 @@ function getPresence(roomId: string) {
 
   const deduped = new Map<
     string,
-    { id: string; name: string; role: "host" | "member" }
+    { id: string; name: string; role: RoomMemberRole }
   >();
 
   for (const { user } of connections.values()) {
@@ -101,7 +102,7 @@ function broadcastPresence(roomId: string) {
 export function addRoomConnection(
   roomId: string,
   ws: WSContext,
-  user: { id: string; name: string; role: "host" | "member" }
+  user: { id: string; name: string; role: RoomMemberRole }
 ) {
   const now = Date.now();
   const connections =
@@ -111,7 +112,7 @@ export function addRoomConnection(
       {
         lastSeenAt: number;
         lastPingAt: number;
-        user: { id: string; name: string; role: "host" | "member" };
+        user: { id: string; name: string; role: RoomMemberRole };
       }
     >();
   const existing = connections.get(ws);

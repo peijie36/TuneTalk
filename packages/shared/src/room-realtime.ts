@@ -1,4 +1,4 @@
-export type RoomMemberRole = "host" | "member";
+import type { RoomMemberRole } from "./rooms";
 
 export interface RoomPresenceParticipant {
   id: string;
