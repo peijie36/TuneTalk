@@ -16,6 +16,9 @@ import { user } from "./auth-schema";
 export const ROOM_MEMBER_ROLES = ["host", "member"] as const;
 export const roomMemberRole = pgEnum("room_member_role", ROOM_MEMBER_ROLES);
 
+export const TRACK_PROVIDERS = ["audius"] as const;
+export const trackProvider = pgEnum("track_provider", TRACK_PROVIDERS);
+
 export const room = pgTable(
   "room",
   {
@@ -68,7 +71,12 @@ export const roomQueueItem = pgTable(
     roomId: text("room_id")
       .notNull()
       .references(() => room.id, { onDelete: "cascade" }),
-    spotifyTrackId: text("spotify_track_id").notNull(),
+    provider: trackProvider("provider").default("audius").notNull(),
+    providerTrackId: text("provider_track_id").notNull(),
+    title: text("title"),
+    artistName: text("artist_name"),
+    artworkUrl: text("artwork_url"),
+    durationSec: integer("duration_sec"),
     position: integer("position").notNull(),
     addedByUserId: text("added_by_user_id").references(() => user.id, {
       onDelete: "set null",
@@ -81,6 +89,35 @@ export const roomQueueItem = pgTable(
       table.position
     ),
     index("room_queue_item_roomId_idx").on(table.roomId),
+  ]
+);
+
+export const roomPlaybackState = pgTable(
+  "room_playback_state",
+  {
+    roomId: text("room_id")
+      .primaryKey()
+      .references(() => room.id, { onDelete: "cascade" }),
+    queueItemId: text("queue_item_id").references(() => roomQueueItem.id, {
+      onDelete: "set null",
+    }),
+    provider: trackProvider("provider"),
+    providerTrackId: text("provider_track_id"),
+    positionSec: integer("position_sec").default(0).notNull(),
+    isPaused: boolean("is_paused").default(true).notNull(),
+    controlledByUserId: text("controlled_by_user_id").references(
+      () => user.id,
+      {
+        onDelete: "set null",
+      }
+    ),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("room_playback_state_queue_item_id_idx").on(table.queueItemId),
+    index("room_playback_state_controlled_by_user_id_idx").on(
+      table.controlledByUserId
+    ),
   ]
 );
 
@@ -116,6 +153,7 @@ export const roomRelations = relations(room, ({ many, one }) => ({
   members: many(roomMember),
   queue: many(roomQueueItem),
   messages: many(roomMessage),
+  playbackState: one(roomPlaybackState),
 }));
 
 export const roomMemberRelations = relations(roomMember, ({ one }) => ({
@@ -139,6 +177,24 @@ export const roomQueueItemRelations = relations(roomQueueItem, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const roomPlaybackStateRelations = relations(
+  roomPlaybackState,
+  ({ one }) => ({
+    room: one(room, {
+      fields: [roomPlaybackState.roomId],
+      references: [room.id],
+    }),
+    queueItem: one(roomQueueItem, {
+      fields: [roomPlaybackState.queueItemId],
+      references: [roomQueueItem.id],
+    }),
+    controlledByUser: one(user, {
+      fields: [roomPlaybackState.controlledByUserId],
+      references: [user.id],
+    }),
+  })
+);
 
 export const roomMessageRelations = relations(roomMessage, ({ one }) => ({
   room: one(room, {

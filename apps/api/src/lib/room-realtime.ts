@@ -2,7 +2,13 @@ import type { WSContext } from "hono/ws";
 
 import { db } from "@tunetalk/db";
 import * as schema from "@tunetalk/db/schema";
-import type { RoomRealtimeEvent } from "@tunetalk/shared/room-realtime";
+import type {
+  RoomPlaybackBroadcast,
+  RoomQueueBroadcast,
+  RoomQueueItemAddedBroadcast,
+  RoomQueueItemsRemovedBroadcast,
+  RoomRealtimeEvent,
+} from "@tunetalk/shared/room-realtime";
 import type { RoomMemberRole } from "@tunetalk/shared/rooms";
 
 const WS_OPEN_STATE = 1;
@@ -143,6 +149,54 @@ export function removeRoomConnection(roomId: string, ws: WSContext) {
 
 export function getRoomPresenceCount(roomId: string) {
   return roomUserConnectionCounts.get(roomId)?.size ?? 0;
+}
+
+export function broadcastPlaybackState(
+  roomId: string,
+  playback: RoomPlaybackBroadcast["playback"]
+) {
+  const connections = rooms.get(roomId);
+  if (!connections) return;
+
+  for (const ws of connections.keys()) {
+    safeSend(ws, { type: "playback_state", roomId, playback });
+  }
+}
+
+export function broadcastQueueState(
+  roomId: string,
+  queue: RoomQueueBroadcast["queue"]
+) {
+  const connections = rooms.get(roomId);
+  if (!connections) return;
+
+  for (const ws of connections.keys()) {
+    safeSend(ws, { type: "queue_state", roomId, queue });
+  }
+}
+
+export function broadcastQueueItemAdded(
+  roomId: string,
+  item: RoomQueueItemAddedBroadcast["item"]
+) {
+  const connections = rooms.get(roomId);
+  if (!connections) return;
+
+  for (const ws of connections.keys()) {
+    safeSend(ws, { type: "queue_item_added", roomId, item });
+  }
+}
+
+export function broadcastQueueItemsRemoved(
+  roomId: string,
+  itemIds: RoomQueueItemsRemovedBroadcast["itemIds"]
+) {
+  const connections = rooms.get(roomId);
+  if (!connections || itemIds.length === 0) return;
+
+  for (const ws of connections.keys()) {
+    safeSend(ws, { type: "queue_items_removed", roomId, itemIds });
+  }
 }
 
 export function broadcastRoomDisbanded(roomId: string) {

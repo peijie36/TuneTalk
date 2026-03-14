@@ -34,7 +34,19 @@ export default function ServerInfoPanel({
         </div>
 
         <div className="flex w-full flex-1 items-center justify-center">
-          <div className="bg-foreground/15 aspect-square w-full max-w-[170px] rounded-2xl shadow-inner" />
+          <div className="aspect-square w-full max-w-[170px] overflow-hidden rounded-2xl shadow-inner">
+            {selectedRoom?.nowPlaying.artworkUrl ? (
+              <img
+                src={selectedRoom.nowPlaying.artworkUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="bg-foreground/15 text-muted-foreground flex h-full w-full items-center justify-center text-xs font-semibold tracking-[0.24em] uppercase">
+                Audio
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="w-full space-y-2 text-center">

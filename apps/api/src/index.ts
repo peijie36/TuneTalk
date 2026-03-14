@@ -9,11 +9,13 @@ import { logger } from "hono/logger";
 
 import { auth } from "@/src/lib/auth";
 import type { HonoAuthVariables } from "@/src/lib/hono-types";
+import { listRoomQueueItems } from "@/src/lib/room-queue";
 import {
   addRoomConnection,
   handleRoomMessage,
   removeRoomConnection,
 } from "@/src/lib/room-realtime";
+import { audiusRoute } from "@/src/routes/audius";
 import { roomsRoute } from "@/src/routes/rooms";
 
 const app = new Hono<HonoAuthVariables>();
@@ -118,6 +120,38 @@ app.get(
             name,
             role: room.createdByUserId === user.id ? "host" : "member",
           });
+
+          const queue = await listRoomQueueItems(roomId);
+          ws.send(
+            JSON.stringify({
+              type: "queue_state",
+              roomId,
+              queue,
+            })
+          );
+
+          const playback = await db.query.roomPlaybackState.findFirst({
+            where: (table, { eq }) => eq(table.roomId, roomId),
+          });
+
+          if (playback) {
+            ws.send(
+              JSON.stringify({
+                type: "playback_state",
+                roomId,
+                playback: {
+                  roomId: playback.roomId,
+                  queueItemId: playback.queueItemId,
+                  provider: playback.provider,
+                  providerTrackId: playback.providerTrackId,
+                  positionSec: playback.positionSec,
+                  isPaused: playback.isPaused,
+                  updatedAt: playback.updatedAt.toISOString(),
+                  controlledByUserId: playback.controlledByUserId,
+                },
+              })
+            );
+          }
         })();
       },
       onMessage: (event, ws) => {
@@ -134,6 +168,7 @@ app.get(
 );
 
 app.route("/api/rooms", roomsRoute);
+app.route("/api/audius", audiusRoute);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });

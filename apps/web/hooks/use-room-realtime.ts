@@ -9,6 +9,7 @@ import type {
   RoomChatMessage,
   RoomPresenceParticipant,
 } from "@tunetalk/shared/room-realtime";
+import type { RoomPlaybackState, RoomQueueItem } from "@tunetalk/shared/rooms";
 
 import { API_BASE_URL } from "@/lib/constants";
 
@@ -55,6 +56,10 @@ export function useRoomRealtime({
   );
   const [wsStatus, setWsStatus] = useState<RoomWebSocketStatus>("idle");
   const [wsStatusDetail, setWsStatusDetail] = useState<string | null>(null);
+  const [playbackState, setPlaybackState] = useState<RoomPlaybackState | null>(
+    null
+  );
+  const [queueState, setQueueState] = useState<RoomQueueItem[] | null>(null);
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimeoutRef.current === null) return;
@@ -76,6 +81,7 @@ export function useRoomRealtime({
       }
 
       setParticipants([]);
+      setQueueState(null);
       setWsStatus("disconnected");
       setWsStatusDetail(reason ?? null);
     },
@@ -167,6 +173,40 @@ export function useRoomRealtime({
         return;
       }
 
+      if (parsed.type === "playback_state" && parsed.roomId === roomId) {
+        setPlaybackState(parsed.playback);
+        return;
+      }
+
+      if (parsed.type === "queue_state" && parsed.roomId === roomId) {
+        setQueueState(parsed.queue);
+        return;
+      }
+
+      if (parsed.type === "queue_item_added" && parsed.roomId === roomId) {
+        setQueueState((current) => {
+          if (!current) return [parsed.item];
+          if (current.some((item) => item.id === parsed.item.id))
+            return current;
+
+          return [...current, parsed.item].sort(
+            (a, b) => a.position - b.position
+          );
+        });
+        return;
+      }
+
+      if (parsed.type === "queue_items_removed" && parsed.roomId === roomId) {
+        setQueueState((current) => {
+          if (!current) return current;
+          if (parsed.itemIds.length === 0) return current;
+
+          const removedIds = new Set(parsed.itemIds);
+          return current.filter((item) => !removedIds.has(item.id));
+        });
+        return;
+      }
+
       if (parsed.type === "chat" && parsed.roomId === roomId) {
         if (parsed.sender.id !== sessionUserId) {
           onAnnouncement?.(`New message from ${parsed.sender.name}.`);
@@ -214,6 +254,7 @@ export function useRoomRealtime({
       if (wsRef.current !== ws) return;
       wsRef.current = null;
       setParticipants([]);
+      setQueueState(null);
 
       if (event.code === 1008) {
         const reason = event.reason || "Room access required.";
@@ -300,6 +341,8 @@ export function useRoomRealtime({
 
   useEffect(() => {
     accessDeniedReasonRef.current = null;
+    setQueueState(null);
+    setPlaybackState(null);
   }, [roomId]);
 
   useEffect(() => {
@@ -361,5 +404,7 @@ export function useRoomRealtime({
     wsStatusDetail,
     sendChat,
     isConnected: wsStatus === "connected",
+    playbackState,
+    queueState,
   };
 }

@@ -5,7 +5,7 @@ import type {
   RoomPresenceParticipant,
   RoomRealtimeEvent,
 } from "@tunetalk/shared/room-realtime";
-import { isRoomMemberRole } from "@tunetalk/shared/rooms";
+import { isRoomMemberRole, isTrackProvider } from "@tunetalk/shared/rooms";
 
 export interface RoomMessagesPage {
   messages: RoomChatMessage[];
@@ -75,6 +75,90 @@ export function parseWsEvent(data: string): RoomRealtimeEvent | null {
   }
 
   if (
+    type === "playback_state" &&
+    typeof record.roomId === "string" &&
+    record.playback &&
+    typeof record.playback === "object"
+  ) {
+    const playback = record.playback as Record<string, unknown>;
+    const roomId = typeof playback.roomId === "string" ? playback.roomId : null;
+    const updatedAt =
+      typeof playback.updatedAt === "string" ? playback.updatedAt : null;
+    const positionSec =
+      typeof playback.positionSec === "number" ? playback.positionSec : null;
+    const isPaused =
+      typeof playback.isPaused === "boolean" ? playback.isPaused : null;
+    const provider = playback.provider === "audius" ? "audius" : null;
+    const queueItemId =
+      typeof playback.queueItemId === "string" ? playback.queueItemId : null;
+    const providerTrackId =
+      typeof playback.providerTrackId === "string"
+        ? playback.providerTrackId
+        : null;
+    const controlledByUserId =
+      typeof playback.controlledByUserId === "string"
+        ? playback.controlledByUserId
+        : null;
+
+    if (!roomId || !updatedAt || positionSec === null || isPaused === null) {
+      return null;
+    }
+
+    return {
+      type: "playback_state",
+      roomId: record.roomId,
+      playback: {
+        roomId,
+        queueItemId,
+        provider,
+        providerTrackId,
+        positionSec,
+        isPaused,
+        updatedAt,
+        controlledByUserId,
+      },
+    };
+  }
+
+  if (
+    typeof record.roomId === "string" &&
+    type === "queue_state" &&
+    Array.isArray(record.queue)
+  ) {
+    const queue = record.queue
+      .map((item) =>
+        item && typeof item === "object"
+          ? parseRoomQueueItem(item as Record<string, unknown>)
+          : null
+      )
+      .filter((item) => item !== null);
+
+    return { type: "queue_state", roomId: record.roomId, queue };
+  }
+
+  if (
+    type === "queue_item_added" &&
+    typeof record.roomId === "string" &&
+    record.item &&
+    typeof record.item === "object"
+  ) {
+    const item = parseRoomQueueItem(record.item as Record<string, unknown>);
+    if (!item) return null;
+    return { type: "queue_item_added", roomId: record.roomId, item };
+  }
+
+  if (
+    type === "queue_items_removed" &&
+    typeof record.roomId === "string" &&
+    Array.isArray(record.itemIds)
+  ) {
+    const itemIds = record.itemIds.filter(
+      (itemId): itemId is string => typeof itemId === "string"
+    );
+    return { type: "queue_items_removed", roomId: record.roomId, itemIds };
+  }
+
+  if (
     type === "chat" &&
     typeof record.roomId === "string" &&
     typeof record.id === "string" &&
@@ -99,6 +183,43 @@ export function parseWsEvent(data: string): RoomRealtimeEvent | null {
   }
 
   return null;
+}
+
+function parseRoomQueueItem(record: Record<string, unknown>) {
+  const id = typeof record.id === "string" ? record.id : null;
+  const roomId = typeof record.roomId === "string" ? record.roomId : null;
+  const provider = isTrackProvider(record.provider) ? record.provider : null;
+  const providerTrackId =
+    typeof record.providerTrackId === "string" ? record.providerTrackId : null;
+  const position = typeof record.position === "number" ? record.position : null;
+  const createdAt =
+    typeof record.createdAt === "string" ? record.createdAt : null;
+
+  if (!id || !roomId || !provider || !providerTrackId || position === null) {
+    return null;
+  }
+
+  if (!createdAt || Number.isNaN(Date.parse(createdAt))) {
+    return null;
+  }
+
+  return {
+    id,
+    roomId,
+    provider,
+    providerTrackId,
+    title: typeof record.title === "string" ? record.title : null,
+    artistName:
+      typeof record.artistName === "string" ? record.artistName : null,
+    artworkUrl:
+      typeof record.artworkUrl === "string" ? record.artworkUrl : null,
+    durationSec:
+      typeof record.durationSec === "number" ? record.durationSec : null,
+    position,
+    addedByUserId:
+      typeof record.addedByUserId === "string" ? record.addedByUserId : null,
+    createdAt,
+  };
 }
 
 export function insertRoomMessage(

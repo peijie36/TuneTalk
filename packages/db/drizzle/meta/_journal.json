@@ -29,6 +29,13 @@
       "when": 1769243300681,
       "tag": "0003_round_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773460628660,
+      "tag": "0004_audius_provider_queue",
+      "breakpoints": true
     }
   ]
 }

@@ -2,9 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, leaveRoom } from "@/api/rooms";
+import { ApiError, leaveRoom, type RoomQueueItemDto } from "@/api/rooms";
 import { useFetchRoom } from "@/hooks/use-fetch-room";
 import { authClient } from "@/lib/auth-client";
 
@@ -32,9 +32,11 @@ export default function RoomPage() {
 
   const [musicQuery, setMusicQuery] = useState("");
   const leavingIntentRef = useRef(false);
+  const prevPlaybackQueueItemIdRef = useRef<string | null>(null);
 
   const [chatError, setChatError] = useState<string | null>(null);
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const [queue, setQueue] = useState<RoomQueueItemDto[]>([]);
 
   const roomQuery = useFetchRoom(roomId);
   const room = roomQuery.data ?? null;
@@ -87,7 +89,14 @@ export default function RoomPage() {
   }, [leaveMutation]);
 
   const realtimeEnabled = roomReady && !isLeaving;
-  const { participants, wsStatus, wsStatusDetail, sendChat } = useRoomRealtime({
+  const {
+    participants,
+    wsStatus,
+    wsStatusDetail,
+    sendChat,
+    playbackState,
+    queueState,
+  } = useRoomRealtime({
     roomId,
     enabled: realtimeEnabled,
     sessionUserId,
@@ -113,8 +122,40 @@ export default function RoomPage() {
       ? participants.length
       : (participantStats?.current ?? null);
   const participantCapacity = participantStats?.capacity ?? null;
-  const nowPlaying = room?.nowPlaying ?? null;
+  const isHost = participants.some(
+    (p) => p.id === sessionUserId && p.role === "host"
+  );
 
+  useEffect(() => {
+    if (!queueState) return;
+    setQueue(queueState);
+  }, [queueState]);
+
+  useEffect(() => {
+    if (!roomReady) return;
+
+    const previousQueueItemId = prevPlaybackQueueItemIdRef.current;
+    const currentQueueItemId = playbackState?.queueItemId ?? null;
+    prevPlaybackQueueItemIdRef.current = currentQueueItemId;
+
+    setQueue((current) => {
+      if (currentQueueItemId) {
+        const currentIndex = current.findIndex(
+          (item) => item.id === currentQueueItemId
+        );
+        return currentIndex > 0 ? current.slice(currentIndex) : current;
+      }
+
+      if (previousQueueItemId) {
+        const previousIndex = current.findIndex(
+          (item) => item.id === previousQueueItemId
+        );
+        return previousIndex >= 0 ? current.slice(previousIndex + 1) : current;
+      }
+
+      return current;
+    });
+  }, [playbackState?.queueItemId, roomReady]);
   const leaveDisabled =
     isLeaving ||
     isSessionPending ||
@@ -127,6 +168,7 @@ export default function RoomPage() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
       <RoomPageHeader
+        roomId={roomId}
         musicQuery={musicQuery}
         onMusicQueryChange={setMusicQuery}
       />
@@ -156,23 +198,30 @@ export default function RoomPage() {
               />
             </div>
 
-            <div className="space-y-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-              <RoomNowPlayingCard nowPlaying={nowPlaying} />
-
-              <RoomChatCard
+            <div className="space-y-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+              <RoomNowPlayingCard
                 roomId={roomId}
-                roomReady={realtimeEnabled}
-                isRoomNotFound={isRoomNotFound}
-                requiresRoomAccess={requiresRoomAccess}
-                roomApiErrorMessage={roomApiError?.message ?? null}
-                sessionUserId={sessionUserId}
-                wsStatus={wsStatus}
-                wsStatusDetail={wsStatusDetail}
-                sendChat={sendChat}
-                chatError={chatError}
-                setChatError={setChatError}
-                liveAnnouncement={liveAnnouncement}
+                queue={queue}
+                playbackState={playbackState}
+                isHost={isHost}
               />
+
+              <div className="flex min-h-0 flex-1 flex-col">
+                <RoomChatCard
+                  roomId={roomId}
+                  roomReady={realtimeEnabled}
+                  isRoomNotFound={isRoomNotFound}
+                  requiresRoomAccess={requiresRoomAccess}
+                  roomApiErrorMessage={roomApiError?.message ?? null}
+                  sessionUserId={sessionUserId}
+                  wsStatus={wsStatus}
+                  wsStatusDetail={wsStatusDetail}
+                  sendChat={sendChat}
+                  chatError={chatError}
+                  setChatError={setChatError}
+                  liveAnnouncement={liveAnnouncement}
+                />
+              </div>
             </div>
           </div>
         </section>

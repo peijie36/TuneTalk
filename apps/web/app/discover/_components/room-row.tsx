@@ -70,13 +70,13 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
 
         <div className="flex flex-col gap-3 sm:items-end">
           <div className="text-text-strong text-sm sm:max-w-[320px] sm:text-right">
-            <span className="text-muted-foreground font-medium">
-              Now Playing:
-            </span>{" "}
-            <span className="font-semibold">{room.nowPlaying.title}</span>{" "}
-            <span className="text-muted-foreground">
-              {"\u2014"} {room.nowPlaying.artist}
-            </span>
+            <div className="text-muted-foreground font-medium">Now Playing</div>
+            <div className="truncate font-semibold">
+              {room.nowPlaying.title}
+            </div>
+            <div className="text-muted-foreground truncate">
+              {room.nowPlaying.artist}
+            </div>
           </div>
 
           <div className="flex items-center justify-end">

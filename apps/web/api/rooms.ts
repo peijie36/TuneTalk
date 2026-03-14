@@ -1,152 +1,19 @@
-import type { RoomChatMessage } from "@tunetalk/shared/room-realtime";
 import type { RoomSummary } from "@tunetalk/shared/rooms";
 
+import {
+  coercePlayback,
+  coerceQueueItem,
+  coerceRoom,
+  coerceRoomList,
+  coerceRoomMessageList,
+  type QueueTrackInput,
+  type RoomPlaybackDto,
+  type RoomQueueItemDto,
+} from "@/api/contracts/rooms";
+import { ApiError, getErrorMessage } from "@/api/core/http";
 import { API_BASE_URL } from "@/lib/constants";
 
-export class ApiError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-  }
-}
-
-function getErrorMessage(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const message = (payload as { error?: unknown }).error;
-  return typeof message === "string" && message.trim() ? message.trim() : null;
-}
-
-function coerceRoom(value: unknown): RoomSummary | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-
-  const id = typeof record.id === "string" ? record.id : null;
-  const name = typeof record.name === "string" ? record.name : null;
-  const createdAtValue = record.createdAt;
-  const createdAt = typeof createdAtValue === "string" ? createdAtValue : null;
-  const createdAtMs =
-    typeof createdAt === "string" ? Date.parse(createdAt) : Number.NaN;
-  const visibility =
-    record.visibility === "public" || record.visibility === "private"
-      ? record.visibility
-      : null;
-
-  const host = record.host as { name?: unknown } | undefined;
-  const hostName = typeof host?.name === "string" ? host.name : null;
-
-  const participants = record.participants as
-    | { current?: unknown; capacity?: unknown }
-    | undefined;
-  const participantsCurrent =
-    typeof participants?.current === "number" ? participants.current : null;
-  const participantsCapacity =
-    typeof participants?.capacity === "number" ? participants.capacity : null;
-
-  const nowPlaying = record.nowPlaying as
-    | { title?: unknown; artist?: unknown }
-    | undefined;
-  const nowPlayingTitle =
-    typeof nowPlaying?.title === "string" ? nowPlaying.title : null;
-  const nowPlayingArtist =
-    typeof nowPlaying?.artist === "string" ? nowPlaying.artist : null;
-
-  if (
-    !id ||
-    !name ||
-    !createdAt ||
-    Number.isNaN(createdAtMs) ||
-    !visibility ||
-    !hostName ||
-    participantsCurrent === null ||
-    participantsCapacity === null ||
-    !nowPlayingTitle ||
-    !nowPlayingArtist
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    name,
-    createdAt,
-    host: { name: hostName },
-    visibility,
-    participants: {
-      current: participantsCurrent,
-      capacity: participantsCapacity,
-    },
-    nowPlaying: { title: nowPlayingTitle, artist: nowPlayingArtist },
-  };
-}
-
-function coerceRoomList(payload: unknown): RoomSummary[] {
-  const list = Array.isArray(payload)
-    ? payload
-    : (payload as { rooms?: unknown })?.rooms;
-  if (!Array.isArray(list)) return [];
-
-  const rooms: RoomSummary[] = [];
-  for (const item of list) {
-    const room = coerceRoom(item);
-    if (room) rooms.push(room);
-  }
-
-  return rooms;
-}
-
-function coerceRoomMessage(value: unknown): RoomChatMessage | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-
-  const id = typeof record.id === "string" ? record.id : null;
-  const text = typeof record.text === "string" ? record.text : null;
-  const createdAt =
-    typeof record.createdAt === "string" ? record.createdAt : null;
-  const createdAtMs =
-    typeof createdAt === "string" ? Date.parse(createdAt) : Number.NaN;
-
-  const sender = record.sender as { id?: unknown; name?: unknown } | undefined;
-  const senderId = typeof sender?.id === "string" ? sender.id : null;
-  const senderName = typeof sender?.name === "string" ? sender.name : null;
-
-  if (
-    !id ||
-    !text ||
-    !createdAt ||
-    Number.isNaN(createdAtMs) ||
-    !senderId ||
-    !senderName
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    sender: { id: senderId, name: senderName },
-    text,
-    createdAt,
-  };
-}
-
-function coerceRoomMessageList(payload: unknown): RoomChatMessage[] {
-  const list = Array.isArray(payload)
-    ? payload
-    : (payload as { messages?: unknown })?.messages;
-  if (!Array.isArray(list)) return [];
-
-  const messages: RoomChatMessage[] = [];
-  for (const item of list) {
-    const message = coerceRoomMessage(item);
-    if (message) messages.push(message);
-  }
-
-  return messages.sort(
-    (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
-  );
-}
+export { ApiError } from "@/api/core/http";
 
 export async function listRooms({
   signal,
@@ -231,7 +98,7 @@ export async function listRoomMessages(
     cursor,
     limit,
   }: { signal?: AbortSignal; cursor?: string; limit?: number } = {}
-): Promise<{ messages: RoomChatMessage[]; nextCursor: string | null }> {
+) {
   const url = new URL(
     `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/messages`
   );
@@ -360,3 +227,112 @@ export async function leaveRoom(
 
   return disbanded ? { disbanded: true } : { left: true };
 }
+
+export async function listRoomQueue(
+  roomId: string
+): Promise<RoomQueueItemDto[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/queue`,
+    { credentials: "include" }
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ?? `Failed to load queue (${response.status})`
+    );
+  }
+  const list = Array.isArray((payload as { queue?: unknown })?.queue)
+    ? (payload as { queue: unknown[] }).queue
+    : [];
+  return list
+    .map(coerceQueueItem)
+    .filter((item): item is RoomQueueItemDto => Boolean(item));
+}
+
+export async function addTrackToRoomQueue(
+  roomId: string,
+  input: QueueTrackInput
+): Promise<RoomQueueItemDto> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/queue`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ??
+        `Failed to add queue item (${response.status})`
+    );
+  }
+
+  const item = coerceQueueItem((payload as { item?: unknown })?.item);
+  if (!item) throw new ApiError(500, "Invalid queue item response");
+  return item;
+}
+
+export async function getRoomPlayback(
+  roomId: string
+): Promise<RoomPlaybackDto> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/playback`,
+    { credentials: "include" }
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ?? `Failed to load playback (${response.status})`
+    );
+  }
+
+  const playback = coercePlayback(
+    (payload as { playback?: unknown })?.playback
+  );
+  if (!playback) throw new ApiError(500, "Invalid playback response");
+  return playback;
+}
+
+export async function updateRoomPlayback(
+  roomId: string,
+  input: {
+    queueItemId?: string | null;
+    provider?: "audius" | null;
+    providerTrackId?: string | null;
+    positionSec?: number;
+    isPaused?: boolean;
+  }
+): Promise<RoomPlaybackDto> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/rooms/${encodeURIComponent(roomId)}/playback`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      getErrorMessage(payload) ??
+        `Failed to update playback (${response.status})`
+    );
+  }
+
+  const playback = coercePlayback(
+    (payload as { playback?: unknown })?.playback
+  );
+  if (!playback) throw new ApiError(500, "Invalid playback response");
+  return playback;
+}
+
+export type { QueueTrackInput, RoomPlaybackDto, RoomQueueItemDto };

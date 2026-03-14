@@ -3,17 +3,39 @@ export const DEFAULT_ROOM_CAPACITY = 10;
 
 export type RoomVisibility = "public" | "private";
 export type RoomMemberRole = "host" | "member";
+export type TrackProvider = "audius";
 
 export function isRoomMemberRole(value: unknown): value is RoomMemberRole {
   return value === "host" || value === "member";
 }
 
+export function isTrackProvider(value: unknown): value is TrackProvider {
+  return value === "audius";
+}
+
+export interface RoomQueueItem {
+  id: string;
+  roomId: string;
+  provider: TrackProvider;
+  providerTrackId: string;
+  title: string | null;
+  artistName: string | null;
+  artworkUrl: string | null;
+  durationSec: number | null;
+  position: number;
+  addedByUserId: string | null;
+  createdAt: string;
+}
+
 export interface RoomPlaybackState {
   roomId: string;
-  trackId: string;
-  positionMs: number;
+  queueItemId: string | null;
+  provider: TrackProvider | null;
+  providerTrackId: string | null;
+  positionSec: number;
   isPaused: boolean;
   updatedAt: string;
+  controlledByUserId: string | null;
 }
 
 export interface RoomMember {
@@ -46,5 +68,6 @@ export interface RoomSummary {
   nowPlaying: {
     title: string;
     artist: string;
+    artworkUrl: string | null;
   };
 }
