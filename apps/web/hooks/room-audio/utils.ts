@@ -34,6 +34,15 @@ export function applyStoredAudioPreferences(audio: HTMLAudioElement) {
   }
 }
 
+export function persistAudioPreferences(audio: HTMLAudioElement) {
+  try {
+    window.localStorage.setItem(AUDIO_VOLUME_STORAGE_KEY, String(audio.volume));
+    window.localStorage.setItem(AUDIO_MUTED_STORAGE_KEY, String(audio.muted));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export function clampPosition(positionSec: number, durationSec: number) {
   return Math.min(Math.max(positionSec, 0), Math.max(durationSec, 0));
 }
