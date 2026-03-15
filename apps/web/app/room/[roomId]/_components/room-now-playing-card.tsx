@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { updateRoomPlayback, type RoomQueueItemDto } from "@/api/rooms";
 import { Card, CardContent } from "@/components/ui/card";
-import { useRoomAudio } from "@/hooks/use-room-audio";
+import { useRoomAudio } from "@/hooks/room-audio/use-room-audio";
 import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
 
 import RoomNowPlayingSummary from "./room-now-playing/room-now-playing-summary";
