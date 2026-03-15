@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { auth } from "@/src/lib/auth";
+import { env } from "@/src/lib/env";
 import type { HonoAuthVariables } from "@/src/lib/hono-types";
 import { listRoomQueueItems } from "@/src/lib/room-queue";
 import {
@@ -21,7 +22,7 @@ import { roomsRoute } from "@/src/routes/rooms";
 const app = new Hono<HonoAuthVariables>();
 const nodeWebSocket = createNodeWebSocket({ app });
 
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+const webOrigin = env.WEB_ORIGIN;
 
 app.use(
   "/api/*",
@@ -170,7 +171,7 @@ app.get(
 app.route("/api/rooms", roomsRoute);
 app.route("/api/audius", audiusRoute);
 
-const port = Number(process.env.PORT ?? 8787);
+const port = env.PORT;
 const server = serve({ fetch: app.fetch, port });
 nodeWebSocket.injectWebSocket(server);
 

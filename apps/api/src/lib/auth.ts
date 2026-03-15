@@ -4,7 +4,9 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { openAPI } from "better-auth/plugins";
 
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+import { env } from "@/src/lib/env";
+
+const webOrigin = env.WEB_ORIGIN;
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {

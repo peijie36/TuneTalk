@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 
+import { env } from "@/src/lib/env";
 import type { HonoAuthVariables } from "@/src/lib/hono-types";
 
 const AUDIUS_API_BASE = "https://api.audius.co/v1";
@@ -13,19 +14,12 @@ interface AudiusTrackDto {
   isStreamable: boolean;
 }
 
-function getAudiusApiKey() {
-  return (
-    process.env.AUDIUS_API_KEY ?? process.env.NEXT_PUBLIC_AUDIUS_API_KEY ?? null
-  );
-}
-
 function getAudiusUrl(pathname: string, searchParams?: Record<string, string>) {
   const url = new URL(`${AUDIUS_API_BASE}${pathname}`);
   url.searchParams.set("app_name", "TuneTalk");
 
-  const apiKey = getAudiusApiKey();
-  if (apiKey) {
-    url.searchParams.set("api_key", apiKey);
+  if (env.AUDIUS_API_KEY) {
+    url.searchParams.set("api_key", env.AUDIUS_API_KEY);
   }
 
   if (searchParams) {
@@ -102,7 +96,7 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
     const query = (c.req.query("q") ?? "").trim();
     if (!query) return c.json({ tracks: [] });
 
-    if (!getAudiusApiKey()) {
+    if (!env.AUDIUS_API_KEY) {
       return c.json({ error: "Audius API key is not configured." }, 500);
     }
 
@@ -131,7 +125,7 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
       return c.json({ error: "Track id is required." }, 400);
     }
 
-    if (!getAudiusApiKey()) {
+    if (!env.AUDIUS_API_KEY) {
       return c.json({ error: "Audius API key is not configured." }, 500);
     }
 
