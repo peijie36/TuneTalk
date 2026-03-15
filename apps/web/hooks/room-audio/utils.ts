@@ -1,10 +1,9 @@
+import { useAudioSettingsStore } from "@/stores/audio-settings";
 import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
 
 export const DRIFT_THRESHOLD_SEC = 2;
 export const PLAYBACK_PROGRESS_SYNC_INTERVAL_MS = 30_000;
 export const PLAYBACK_PROGRESS_SYNC_THRESHOLD_SEC = 30;
-const AUDIO_VOLUME_STORAGE_KEY = "tunetalk:room-audio-volume";
-const AUDIO_MUTED_STORAGE_KEY = "tunetalk:room-audio-muted";
 
 export function getAuthoritativePositionSec(
   playback: RoomPlaybackState | null
@@ -20,39 +19,15 @@ export function getAuthoritativePositionSec(
 }
 
 export function applyStoredAudioPreferences(audio: HTMLAudioElement) {
-  const { storedVolume, storedMuted } = readStoredAudioPreferences();
-
-  if (storedVolume !== null) {
-    const parsedVolume = Number(storedVolume);
-    if (Number.isFinite(parsedVolume)) {
-      audio.volume = Math.min(1, Math.max(0, parsedVolume));
-    }
-  }
-
-  if (storedMuted !== null) {
-    audio.muted = storedMuted === "true";
-  }
+  const { volume, isMuted } = useAudioSettingsStore.getState();
+  audio.volume = volume;
+  audio.muted = isMuted;
 }
 
 export function persistAudioPreferences(audio: HTMLAudioElement) {
-  try {
-    window.localStorage.setItem(AUDIO_VOLUME_STORAGE_KEY, String(audio.volume));
-    window.localStorage.setItem(AUDIO_MUTED_STORAGE_KEY, String(audio.muted));
-  } catch {
-    // ignore storage failures
-  }
+  useAudioSettingsStore.getState().syncFromAudio(audio);
 }
 
 export function clampPosition(positionSec: number, durationSec: number) {
   return Math.min(Math.max(positionSec, 0), Math.max(durationSec, 0));
-}
-
-function readStoredAudioPreferences() {
-  try {
-    const storedVolume = window.localStorage.getItem(AUDIO_VOLUME_STORAGE_KEY);
-    const storedMuted = window.localStorage.getItem(AUDIO_MUTED_STORAGE_KEY);
-    return { storedVolume, storedMuted };
-  } catch {
-    return { storedVolume: null, storedMuted: null };
-  }
 }

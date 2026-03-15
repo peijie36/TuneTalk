@@ -13,6 +13,7 @@ import {
   PLAYBACK_PROGRESS_SYNC_INTERVAL_MS,
   PLAYBACK_PROGRESS_SYNC_THRESHOLD_SEC,
 } from "@/hooks/room-audio/utils";
+import { useAudioSettingsStore } from "@/stores/audio-settings";
 import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
 
 export function useRoomAudio({
@@ -33,8 +34,8 @@ export function useRoomAudio({
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
   const [isAudioPaused, setIsAudioPaused] = useState(true);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  const volume = useAudioSettingsStore((state) => state.volume);
+  const isMuted = useAudioSettingsStore((state) => state.isMuted);
 
   const activePlayback = realtimePlayback ?? playback;
 
@@ -44,9 +45,6 @@ export function useRoomAudio({
   );
 
   const persistVolumeState = useCallback((audio: HTMLAudioElement) => {
-    setVolume(audio.volume);
-    setIsMuted(audio.muted);
-
     persistAudioPreferences(audio);
   }, []);
 
@@ -143,9 +141,20 @@ export function useRoomAudio({
     if (!audio) return;
 
     applyStoredAudioPreferences(audio);
-    setVolume(audio.volume);
-    setIsMuted(audio.muted);
   }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.volume !== volume) {
+      audio.volume = volume;
+    }
+
+    if (audio.muted !== isMuted) {
+      audio.muted = isMuted;
+    }
+  }, [isMuted, volume]);
 
   useEffect(() => {
     setDurationSec(activeQueueItem?.durationSec ?? 0);
@@ -264,8 +273,6 @@ export function useRoomAudio({
     if (audio.src !== nextSrc) {
       audio.src = nextSrc;
       applyStoredAudioPreferences(audio);
-      setVolume(audio.volume);
-      setIsMuted(audio.muted);
     }
 
     const remoteTime = getAuthoritativePositionSec(activePlayback);
