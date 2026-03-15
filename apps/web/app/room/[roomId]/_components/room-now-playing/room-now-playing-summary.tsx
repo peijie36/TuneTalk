@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 interface RoomNowPlayingSummaryProps {
   artworkUrl: string | null;
   title: string;
@@ -13,11 +15,24 @@ export default function RoomNowPlayingSummary({
   artist,
   isPaused,
 }: RoomNowPlayingSummaryProps) {
+  const [hasImageError, setHasImageError] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [artworkUrl]);
+
+  const showArtwork = Boolean(artworkUrl) && !hasImageError;
+
   return (
     <div className="flex items-center gap-3.5">
       <div className="h-17 w-17 shrink-0 overflow-hidden rounded-[20px] shadow-sm sm:h-19 sm:w-19">
-        {artworkUrl ? (
-          <img src={artworkUrl} alt="" className="h-full w-full object-cover" />
+        {showArtwork ? (
+          <img
+            src={artworkUrl ?? undefined}
+            alt=""
+            className="block h-full w-full object-cover"
+            onError={() => setHasImageError(true)}
+          />
         ) : (
           <div className="bg-muted text-muted-foreground flex h-full w-full items-center justify-center text-[10px] font-semibold tracking-[0.24em] uppercase">
             Audio

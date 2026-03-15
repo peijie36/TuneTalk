@@ -45,7 +45,6 @@ export default function RoomNowPlayingCard({
   });
 
   const [scrubPositionSec, setScrubPositionSec] = useState<number | null>(null);
-
   const artworkUrl = activeQueueItem?.artworkUrl ?? null;
   const nowPlayingTitle = activeQueueItem?.title ?? "-";
   const nowPlayingArtist = activeQueueItem?.artistName ?? "-";
