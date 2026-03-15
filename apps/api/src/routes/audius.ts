@@ -91,6 +91,13 @@ async function audiusGet(
   return { response, payload };
 }
 
+async function audiusStream(pathname: string, headers?: HeadersInit) {
+  return fetch(getAudiusUrl(pathname), {
+    method: "GET",
+    headers,
+  });
+}
+
 export const audiusRoute = new Hono<HonoAuthVariables>()
   .get("/search", async (c) => {
     const query = (c.req.query("q") ?? "").trim();
@@ -143,4 +150,52 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
 
     const track = coerceTrack((payload as { data?: unknown })?.data);
     return c.json({ track });
+  })
+  .get("/tracks/:trackId/stream", async (c) => {
+    const trackId = c.req.param("trackId");
+    if (!trackId.trim()) {
+      return c.json({ error: "Track id is required." }, 400);
+    }
+
+    if (!env.AUDIUS_API_KEY) {
+      return c.json({ error: "Audius API key is not configured." }, 500);
+    }
+
+    const forwardHeaders = new Headers({
+      Accept: c.req.header("accept") ?? "*/*",
+    });
+    const range = c.req.header("range");
+    if (range) {
+      forwardHeaders.set("range", range);
+    }
+
+    const response = await audiusStream(
+      `/tracks/${encodeURIComponent(trackId)}/stream`,
+      forwardHeaders
+    );
+
+    if (!response.ok && response.status !== 206) {
+      return c.json({ error: "Failed to stream Audius track." }, 502);
+    }
+
+    const headers = new Headers();
+    for (const name of [
+      "accept-ranges",
+      "cache-control",
+      "content-length",
+      "content-range",
+      "content-type",
+      "etag",
+      "last-modified",
+    ]) {
+      const value = response.headers.get(name);
+      if (value) {
+        headers.set(name, value);
+      }
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      headers,
+    });
   });

@@ -1,8 +1,5 @@
 import { API_BASE_URL } from "@/lib/constants";
 
-const AUDIUS_API = "https://api.audius.co/v1";
-const AUDIUS_API_KEY = process.env.NEXT_PUBLIC_AUDIUS_API_KEY;
-
 export interface AudiusTrack {
   id: string;
   title: string;
@@ -72,12 +69,7 @@ export async function searchAudiusTracks(
 }
 
 export function audiusStreamUrl(trackId: string) {
-  const url = new URL(
-    `${AUDIUS_API}/tracks/${encodeURIComponent(trackId)}/stream`
-  );
-  url.searchParams.set("app_name", "TuneTalk");
-  if (AUDIUS_API_KEY) url.searchParams.set("api_key", AUDIUS_API_KEY);
-  return url.toString();
+  return `${API_BASE_URL}/api/audius/tracks/${encodeURIComponent(trackId)}/stream`;
 }
 
 export async function resolveAudiusTrack(
