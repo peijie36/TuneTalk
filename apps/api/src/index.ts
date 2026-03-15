@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { db } from "@tunetalk/db";
 import * as schema from "@tunetalk/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -55,6 +55,15 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.get("/", (c) => c.text("Hello, world!"));
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/ready", async (c) => {
+  try {
+    await db.execute(sql`select 1`);
+    return c.json({ status: "ready" });
+  } catch {
+    return c.json({ status: "not_ready" }, 503);
+  }
+});
+
 app.get("/api/me", (c) => {
   const user = c.get("user");
   const session = c.get("session");
