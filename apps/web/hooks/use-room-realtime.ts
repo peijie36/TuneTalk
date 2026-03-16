@@ -36,6 +36,7 @@ export function useRoomRealtime({
   onChatError,
   onAnnouncement,
   onAccessRequired,
+  onRoomDisbanded,
 }: {
   roomId: string;
   enabled: boolean;
@@ -43,6 +44,7 @@ export function useRoomRealtime({
   onChatError?: (message: string) => void;
   onAnnouncement?: (message: string) => void;
   onAccessRequired?: (reason: string) => void;
+  onRoomDisbanded?: () => void;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -157,6 +159,7 @@ export function useRoomRealtime({
       }
 
       if (parsed.type === "room_disbanded" && parsed.roomId === roomId) {
+        onRoomDisbanded?.();
         void queryClient.invalidateQueries({ queryKey: ["rooms"] });
         router.replace("/discover?toast=disbanded");
         return;
@@ -305,6 +308,7 @@ export function useRoomRealtime({
     onAccessRequired,
     onAnnouncement,
     onChatError,
+    onRoomDisbanded,
     queryClient,
     roomId,
     router,

@@ -13,6 +13,7 @@ import {
 import { RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import { ApiError, getRoom } from "@/api/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
 import AppHeader from "@/components/layout/app-header";
 import PrimaryNav from "@/components/layout/primary-nav";
@@ -22,6 +23,7 @@ import { useCreateRoom } from "@/hooks/use-create-room";
 import { useFetchRoomList } from "@/hooks/use-fetch-room-list";
 import { useJoinRoom } from "@/hooks/use-join-room";
 import { authClient } from "@/lib/auth-client";
+import { useHostRoomResumeStore } from "@/stores/host-room-resume";
 import { cn } from "@/utils/cn";
 
 import CreateRoomModal from "./_components/create-room-modal";
@@ -44,11 +46,25 @@ export default function DiscoverPage() {
   const searchParams = useSearchParams();
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
+  const persistedHostedRoomId = useHostRoomResumeStore((state) => state.roomId);
+  const persistedHostedRoomName = useHostRoomResumeStore(
+    (state) => state.roomName
+  );
+  const persistedHostUserId = useHostRoomResumeStore(
+    (state) => state.hostUserId
+  );
+  const clearHostedRoom = useHostRoomResumeStore(
+    (state) => state.clearHostedRoom
+  );
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [filter, setFilter] = useState<RoomFilter>("all");
   const [pageIndex, setPageIndex] = useState(0);
+  const [resumeHostedRoom, setResumeHostedRoom] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const {
     rooms,
@@ -97,6 +113,61 @@ export default function DiscoverPage() {
     const exists = rooms.some((room) => room.id === selectedRoomId);
     if (!exists) setSelectedRoomId(firstRoomId);
   }, [rooms, selectedRoomId]);
+
+  useEffect(() => {
+    if (isSessionPending) return;
+
+    const sessionUserId = session?.user?.id ?? null;
+    if (!sessionUserId) {
+      setResumeHostedRoom(null);
+      clearHostedRoom();
+      return;
+    }
+
+    if (!persistedHostedRoomId || !persistedHostUserId) {
+      setResumeHostedRoom(null);
+      return;
+    }
+
+    if (persistedHostUserId !== sessionUserId) {
+      setResumeHostedRoom(null);
+      clearHostedRoom();
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    void getRoom(persistedHostedRoomId, { signal: abortController.signal })
+      .then((room) => {
+        if (abortController.signal.aborted) return;
+        setResumeHostedRoom({
+          id: room.id,
+          name: persistedHostedRoomName ?? room.name,
+        });
+      })
+      .catch((error) => {
+        if (abortController.signal.aborted) return;
+
+        setResumeHostedRoom(null);
+        if (
+          error instanceof ApiError &&
+          (error.status === 401 || error.status === 403 || error.status === 404)
+        ) {
+          clearHostedRoom();
+        }
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [
+    clearHostedRoom,
+    isSessionPending,
+    persistedHostedRoomId,
+    persistedHostedRoomName,
+    persistedHostUserId,
+    session?.user?.id,
+  ]);
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
@@ -271,6 +342,11 @@ export default function DiscoverPage() {
     handleJoinRoom(selectedRoom.id);
   };
 
+  const handleResumeHostedRoom = useCallback(() => {
+    if (!resumeHostedRoom) return;
+    router.push(`/room/${resumeHostedRoom.id}`);
+  }, [resumeHostedRoom, router]);
+
   const handlePrevPage = () => {
     setPageIndex((current) => Math.max(0, current - 1));
   };
@@ -333,6 +409,26 @@ export default function DiscoverPage() {
             </div>
 
             <div className="space-y-5 lg:col-start-2 lg:row-start-1">
+              {resumeHostedRoom ? (
+                <div className="border-border/70 flex flex-col gap-3 rounded-3xl border bg-white/75 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-text-strong text-sm font-semibold">
+                      Resume hosting room
+                    </p>
+                    <p className="text-muted-foreground truncate text-sm">
+                      {resumeHostedRoom.name}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="h-11 px-6"
+                    onClick={handleResumeHostedRoom}
+                  >
+                    Resume
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   {FILTER_OPTIONS.map((option) => (

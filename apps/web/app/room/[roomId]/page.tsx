@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, leaveRoom, type RoomQueueItemDto } from "@/api/rooms";
 import { useFetchRoom } from "@/hooks/use-fetch-room";
 import { authClient } from "@/lib/auth-client";
+import { useHostRoomResumeStore } from "@/stores/host-room-resume";
 
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import RoomChatCard from "./_components/room-chat-card";
@@ -29,6 +30,10 @@ export default function RoomPage() {
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
   const sessionUserId = session?.user?.id ?? null;
+  const setHostedRoom = useHostRoomResumeStore((state) => state.setHostedRoom);
+  const clearHostedRoom = useHostRoomResumeStore(
+    (state) => state.clearHostedRoom
+  );
 
   const [musicQuery, setMusicQuery] = useState("");
   const leavingIntentRef = useRef(false);
@@ -59,6 +64,7 @@ export default function RoomPage() {
       leavingIntentRef.current = false;
     },
     onSuccess: (result) => {
+      clearHostedRoom();
       void queryClient.invalidateQueries({ queryKey: ["rooms"] });
 
       router.replace(
@@ -103,6 +109,7 @@ export default function RoomPage() {
     onChatError: setChatError,
     onAnnouncement: setLiveAnnouncement,
     onAccessRequired: handleRealtimeAccessRequired,
+    onRoomDisbanded: clearHostedRoom,
   });
 
   const roomName =
@@ -125,6 +132,15 @@ export default function RoomPage() {
   const isHost = participants.some(
     (p) => p.id === sessionUserId && p.role === "host"
   );
+
+  useEffect(() => {
+    if (!roomReady || !isHost || !sessionUserId || !room) return;
+    setHostedRoom({
+      roomId,
+      roomName: room.name,
+      hostUserId: sessionUserId,
+    });
+  }, [isHost, room, roomId, roomReady, sessionUserId, setHostedRoom]);
 
   useEffect(() => {
     if (!queueState) return;
