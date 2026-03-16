@@ -1,8 +1,7 @@
 "use client";
 
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import { Send } from "lucide-react";
 
@@ -12,17 +11,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useRoomChatListState } from "@/hooks/use-room-chat-list-state";
 import { useRoomMessages } from "@/hooks/use-room-messages";
 import type {
   RoomWebSocketStatus,
   SendChatResult,
 } from "@/hooks/use-room-realtime";
 import { cn } from "@/utils/cn";
-import { mergeRoomMessagePages } from "@/utils/room-messages";
-import { formatMessageTime, isNearBottom } from "@/utils/room-realtime-utils";
+import { formatMessageTime } from "@/utils/room-realtime-utils";
 import { getInitials } from "@/utils/string-utils";
-
-type RoomMessagesQuery = ReturnType<typeof useRoomMessages>;
 
 function ChatHeader() {
   return (
@@ -34,101 +31,132 @@ function ChatHeader() {
   );
 }
 
-function ChatMessageList({
+function ChatShell({ children }: { children: React.ReactNode }) {
+  return (
+    <Card className="border-border/70 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
+      <ChatHeader />
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 px-4 pt-0 pb-4">
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChatAvatar({ name }: { name: string }) {
+  return (
+    <Avatar className="h-9 w-9 border border-white/60">
+      <AvatarFallback>{getInitials(name)}</AvatarFallback>
+    </Avatar>
+  );
+}
+
+const ChatMessageRow = memo(function ChatMessageRow({
+  index,
+  start,
+  measureElement,
+  message,
+  sessionUserId,
+}: {
+  index: number;
+  start: number;
+  measureElement: (node: Element | null) => void;
+  message: RoomChatMessage;
+  sessionUserId: string | null;
+}) {
+  const isYou = message.sender.id === sessionUserId;
+  const senderName = isYou ? "You" : message.sender.name;
+  const avatarLabel = message.sender.name;
+  const timeLabel = formatMessageTime(message.createdAt);
+
+  return (
+    <div
+      data-index={index}
+      ref={measureElement}
+      className="absolute top-0 left-0 w-full py-1"
+      style={{ transform: `translateY(${start}px)` }}
+    >
+      <div
+        className={cn(
+          "flex w-full items-end gap-2",
+          isYou ? "justify-end" : "justify-start"
+        )}
+      >
+        {!isYou ? <ChatAvatar name={avatarLabel} /> : null}
+
+        <div
+          className={cn(
+            "flex max-w-[78%] flex-col gap-1 sm:max-w-[70%]",
+            isYou ? "items-end text-right" : "items-start"
+          )}
+        >
+          <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-semibold">
+            <span>{senderName}</span>
+            {timeLabel ? (
+              <span className="text-muted-foreground/80 font-medium">
+                {timeLabel}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className={cn(
+              "rounded-2xl px-4 py-3 text-sm leading-relaxed wrap-break-word whitespace-pre-wrap shadow-sm",
+              isYou
+                ? "bg-primary text-primary-foreground rounded-br-md"
+                : "bg-muted/70 text-text-strong rounded-bl-md"
+            )}
+          >
+            {message.text}
+          </div>
+        </div>
+
+        {isYou ? <ChatAvatar name={avatarLabel} /> : null}
+      </div>
+    </div>
+  );
+});
+
+const ChatMessageList = memo(function ChatMessageList({
   sessionUserId,
   wsStatus,
   liveAnnouncement,
-  messagesQuery,
   messages,
+  hasNextPage,
+  isFetching,
+  isFetchingNextPage,
+  fetchNextPage,
 }: {
   sessionUserId: string | null;
   wsStatus: RoomWebSocketStatus;
   liveAnnouncement: string;
-  messagesQuery: RoomMessagesQuery;
   messages: RoomChatMessage[];
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
 }) {
-  const [unreadCount, setUnreadCount] = useState(0);
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const shouldStickToBottomRef = useRef(true);
-  const prevMessageCountRef = useRef(0);
-
-  const chatVirtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => chatScrollRef.current,
-    estimateSize: () => 104,
-    overscan: 10,
-    getItemKey: (index) => messages[index]?.id ?? index,
+  const {
+    chatScrollRef,
+    chatVirtualizer,
+    unreadCount,
+    handleChatScroll,
+    handleJumpToLatest,
+    handleLoadOlder,
+  } = useRoomChatListState({
+    messages,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    wsStatus,
   });
 
-  useEffect(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    if (!shouldStickToBottomRef.current && !isNearBottom(el)) return;
-    shouldStickToBottomRef.current = true;
-
-    requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-    });
-  }, [messages.length]);
-
-  useEffect(() => {
-    const prev = prevMessageCountRef.current;
-    prevMessageCountRef.current = messages.length;
-
-    if (messages.length <= prev) return;
-    if (shouldStickToBottomRef.current) {
-      setUnreadCount(0);
-      return;
-    }
-
-    setUnreadCount((count) => count + (messages.length - prev));
-  }, [messages.length]);
-
-  const handleChatScroll = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    shouldStickToBottomRef.current = isNearBottom(el);
-    if (shouldStickToBottomRef.current) setUnreadCount(0);
-  }, []);
-
-  const handleLoadOlder = useCallback(async () => {
-    if (!messagesQuery.hasNextPage || messagesQuery.isFetchingNextPage) return;
-    const el = chatScrollRef.current;
-    if (!el) {
-      await messagesQuery.fetchNextPage();
-      return;
-    }
-
-    shouldStickToBottomRef.current = false;
-
-    const prevScrollHeight = el.scrollHeight;
-    const prevScrollTop = el.scrollTop;
-
-    await messagesQuery.fetchNextPage();
-
-    requestAnimationFrame(() => {
-      const nextScrollHeight = el.scrollHeight;
-      el.scrollTop = prevScrollTop + (nextScrollHeight - prevScrollHeight);
-    });
-  }, [
-    messagesQuery.fetchNextPage,
-    messagesQuery.hasNextPage,
-    messagesQuery.isFetchingNextPage,
-  ]);
-
-  const handleJumpToLatest = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    shouldStickToBottomRef.current = true;
-    setUnreadCount(0);
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    if (wsStatus !== "connected") return;
-    shouldStickToBottomRef.current = true;
-    setUnreadCount(0);
-  }, [wsStatus]);
+  const statusNotice = !sessionUserId
+    ? "Sign in to chat. Messages are still visible."
+    : wsStatus !== "connected"
+      ? "Connecting to realtime chat..."
+      : null;
+  const emptyStateText = isFetching
+    ? "Loading messages..."
+    : "No messages yet. Say hello!";
 
   return (
     <>
@@ -136,18 +164,16 @@ function ChatMessageList({
         {liveAnnouncement}
       </div>
 
-      {messagesQuery.hasNextPage ? (
+      {hasNextPage ? (
         <div className="flex justify-center">
           <Button
             type="button"
             variant="secondary"
             size="sm"
             onClick={() => void handleLoadOlder()}
-            disabled={messagesQuery.isFetchingNextPage}
+            disabled={isFetchingNextPage}
           >
-            {messagesQuery.isFetchingNextPage
-              ? "Loading..."
-              : "Load older messages"}
+            {isFetchingNextPage ? "Loading..." : "Load older messages"}
           </Button>
         </div>
       ) : null}
@@ -158,92 +184,29 @@ function ChatMessageList({
           className="border-border/70 tt-scrollbar-hidden h-full min-h-0 overflow-y-auto rounded-2xl border bg-white/80 p-3 shadow-inner"
           onScroll={handleChatScroll}
         >
-          {!sessionUserId ? (
-            <div className="text-muted-foreground text-sm">
-              Sign in to chat (messages are visible).
-            </div>
-          ) : wsStatus !== "connected" ? (
-            <div className="text-muted-foreground text-sm">
-              Connecting to realtime chat...
-            </div>
+          {statusNotice ? (
+            <div className="text-muted-foreground text-sm">{statusNotice}</div>
           ) : null}
 
           {messages.length === 0 ? (
             <div className="text-muted-foreground text-sm">
-              {messagesQuery.isFetching
-                ? "Loading messages..."
-                : "No messages yet. Say hello!"}
+              {emptyStateText}
             </div>
           ) : (
             <div
               className="relative w-full"
               style={{ height: chatVirtualizer.getTotalSize() }}
             >
-              {chatVirtualizer.getVirtualItems().map((item) => {
-                const message = messages[item.index];
-                const isYou = message.sender.id === sessionUserId;
-                const avatarLabel = message.sender.name;
-                const timeLabel = formatMessageTime(message.createdAt);
-
-                return (
-                  <div
-                    key={item.key}
-                    data-index={item.index}
-                    ref={chatVirtualizer.measureElement}
-                    className="absolute top-0 left-0 w-full py-1"
-                    style={{ transform: `translateY(${item.start}px)` }}
-                  >
-                    <div
-                      className={cn(
-                        "flex w-full items-end gap-2",
-                        isYou ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      {!isYou ? (
-                        <Avatar className="h-9 w-9 border border-white/60">
-                          <AvatarFallback>
-                            {getInitials(avatarLabel)}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : null}
-
-                      <div
-                        className={cn(
-                          "flex max-w-[78%] flex-col gap-1 sm:max-w-[70%]",
-                          isYou ? "items-end text-right" : "items-start"
-                        )}
-                      >
-                        <div className="text-muted-foreground flex items-center gap-2 px-1 text-xs font-semibold">
-                          <span>{isYou ? "You" : message.sender.name}</span>
-                          {timeLabel ? (
-                            <span className="text-muted-foreground/80 font-medium">
-                              {timeLabel}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-3 text-sm leading-relaxed wrap-break-word whitespace-pre-wrap shadow-sm",
-                            isYou
-                              ? "bg-primary text-primary-foreground rounded-br-md"
-                              : "bg-muted/70 text-text-strong rounded-bl-md"
-                          )}
-                        >
-                          {message.text}
-                        </div>
-                      </div>
-
-                      {isYou ? (
-                        <Avatar className="h-9 w-9 border border-white/60">
-                          <AvatarFallback>
-                            {getInitials(avatarLabel)}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+              {chatVirtualizer.getVirtualItems().map((item) => (
+                <ChatMessageRow
+                  key={item.key}
+                  index={item.index}
+                  start={item.start}
+                  measureElement={chatVirtualizer.measureElement}
+                  message={messages[item.index]}
+                  sessionUserId={sessionUserId}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -264,7 +227,7 @@ function ChatMessageList({
       </div>
     </>
   );
-}
+});
 
 function ChatComposer({
   sessionUserId,
@@ -342,6 +305,44 @@ function ChatComposer({
   );
 }
 
+function ChatCallout({
+  title,
+  description,
+  detail,
+  children,
+}: {
+  title: string;
+  description: string;
+  detail?: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-white/30 bg-white/15 p-4">
+      <p className="text-text-strong text-sm font-semibold">{title}</p>
+      <p className="text-muted-foreground text-sm">{description}</p>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      {detail ? (
+        <p className="text-muted-foreground text-xs">{detail}</p>
+      ) : null}
+    </div>
+  );
+}
+
+interface RoomChatCardProps {
+  roomId: string;
+  roomReady: boolean;
+  isRoomNotFound: boolean;
+  requiresRoomAccess: boolean;
+  roomApiErrorMessage: string | null;
+  sessionUserId: string | null;
+  wsStatus: RoomWebSocketStatus;
+  wsStatusDetail: string | null;
+  sendChat: (text: string) => SendChatResult;
+  chatError: string | null;
+  setChatError: (value: string | null) => void;
+  liveAnnouncement: string;
+}
+
 export default function RoomChatCard({
   roomId,
   roomReady,
@@ -355,27 +356,9 @@ export default function RoomChatCard({
   chatError,
   setChatError,
   liveAnnouncement,
-}: {
-  roomId: string;
-  roomReady: boolean;
-  isRoomNotFound: boolean;
-  requiresRoomAccess: boolean;
-  roomApiErrorMessage: string | null;
-  sessionUserId: string | null;
-  wsStatus: RoomWebSocketStatus;
-  wsStatusDetail: string | null;
-  sendChat: (text: string) => SendChatResult;
-  chatError: string | null;
-  setChatError: (value: string | null) => void;
-  liveAnnouncement: string;
-}) {
+}: RoomChatCardProps) {
   const router = useRouter();
-
   const messagesQuery = useRoomMessages(roomId, roomReady);
-  const messages = useMemo(() => {
-    return mergeRoomMessagePages(messagesQuery.data?.pages ?? []);
-  }, [messagesQuery.data]);
-
   const canSendChat = !!sessionUserId && wsStatus === "connected" && roomReady;
 
   useEffect(() => {
@@ -385,100 +368,90 @@ export default function RoomChatCard({
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (wsStatus !== "connected") return;
-    setChatError(null);
+    if (wsStatus === "connected") setChatError(null);
   }, [setChatError, wsStatus]);
 
+  if (isRoomNotFound) {
+    return (
+      <ChatShell>
+        <ChatCallout
+          title="Room not found"
+          description="This room may have been disbanded or the link is incorrect."
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.replace("/discover")}
+          >
+            Back to Discover
+          </Button>
+        </ChatCallout>
+      </ChatShell>
+    );
+  }
+
+  if (requiresRoomAccess && !roomReady) {
+    return (
+      <ChatShell>
+        <ChatCallout
+          title="Private room"
+          description="Sign in, then enter the room password to join."
+          detail={roomApiErrorMessage}
+        >
+          {!sessionUserId ? (
+            <p className="text-muted-foreground text-sm">
+              Sign in using the header.
+            </p>
+          ) : (
+            <Button
+              type="button"
+              onClick={() =>
+                router.replace("/discover?toast=password_required")
+              }
+            >
+              Go to Discover to join
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.replace("/discover")}
+          >
+            Back to Discover
+          </Button>
+        </ChatCallout>
+      </ChatShell>
+    );
+  }
+
   return (
-    <Card className="border-border/70 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
-      <ChatHeader />
+    <ChatShell>
+      <ChatMessageList
+        sessionUserId={sessionUserId}
+        wsStatus={wsStatus}
+        liveAnnouncement={liveAnnouncement}
+        messages={messagesQuery.messages}
+        hasNextPage={Boolean(messagesQuery.hasNextPage)}
+        isFetching={messagesQuery.isFetching}
+        isFetchingNextPage={messagesQuery.isFetchingNextPage}
+        fetchNextPage={messagesQuery.fetchNextPage}
+      />
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 px-4 pt-0 pb-4">
-        {isRoomNotFound ? (
-          <div className="space-y-3 rounded-2xl border border-white/30 bg-white/15 p-4">
-            <p className="text-text-strong text-sm font-semibold">
-              Room not found
-            </p>
-            <p className="text-muted-foreground text-sm">
-              This room may have been disbanded or the link is incorrect.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => router.replace("/discover")}
-              >
-                Back to Discover
-              </Button>
-            </div>
-          </div>
-        ) : requiresRoomAccess && !roomReady ? (
-          <div className="space-y-3 rounded-2xl border border-white/30 bg-white/15 p-4">
-            <p className="text-text-strong text-sm font-semibold">
-              Private room
-            </p>
-            <p className="text-muted-foreground text-sm">
-              Sign in, then enter the room password to join.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {!sessionUserId ? (
-                <p className="text-muted-foreground text-sm">
-                  Sign in using the header.
-                </p>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={() =>
-                    router.replace("/discover?toast=password_required")
-                  }
-                >
-                  Go to Discover to join
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => router.replace("/discover")}
-              >
-                Back to Discover
-              </Button>
-            </div>
-            {roomApiErrorMessage ? (
-              <p className="text-muted-foreground text-xs">
-                {roomApiErrorMessage}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <>
-            <ChatMessageList
-              sessionUserId={sessionUserId}
-              wsStatus={wsStatus}
-              liveAnnouncement={liveAnnouncement}
-              messagesQuery={messagesQuery}
-              messages={messages}
-            />
+      {chatError ? (
+        <p className="text-destructive text-sm font-medium">{chatError}</p>
+      ) : null}
 
-            {chatError ? (
-              <p className="text-destructive text-sm font-medium">
-                {chatError}
-              </p>
-            ) : null}
+      <ChatComposer
+        sessionUserId={sessionUserId}
+        wsStatus={wsStatus}
+        canSendChat={canSendChat}
+        sendChat={sendChat}
+        onChatError={setChatError}
+      />
 
-            <ChatComposer
-              sessionUserId={sessionUserId}
-              wsStatus={wsStatus}
-              canSendChat={canSendChat}
-              sendChat={sendChat}
-              onChatError={(message) => setChatError(message)}
-            />
-
-            {wsStatusDetail && wsStatus !== "connected" ? (
-              <p className="text-muted-foreground text-xs">{wsStatusDetail}</p>
-            ) : null}
-          </>
-        )}
-      </CardContent>
-    </Card>
+      {wsStatusDetail && wsStatus !== "connected" ? (
+        <p className="text-muted-foreground text-xs">{wsStatusDetail}</p>
+      ) : null}
+    </ChatShell>
   );
 }

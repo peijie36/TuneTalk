@@ -1,11 +1,13 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import { listRoomMessages } from "@/api/rooms";
+import { mergeRoomMessagePages } from "@/utils/room-messages";
 
 export function useRoomMessages(roomId: string, enabled: boolean) {
-  return useInfiniteQuery({
+  const query = useInfiniteQuery({
     queryKey: ["roomMessages", roomId],
     queryFn: ({ pageParam, signal }) =>
       listRoomMessages(roomId, {
@@ -19,4 +21,14 @@ export function useRoomMessages(roomId: string, enabled: boolean) {
     retry: 0,
     refetchOnWindowFocus: false,
   });
+
+  const messages = useMemo(
+    () => mergeRoomMessagePages(query.data?.pages ?? []),
+    [query.data?.pages]
+  );
+
+  return {
+    ...query,
+    messages,
+  };
 }
