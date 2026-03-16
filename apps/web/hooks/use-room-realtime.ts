@@ -5,17 +5,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import type {
-  RoomChatMessage,
-  RoomPresenceParticipant,
-} from "@tunetalk/shared/room-realtime";
+import type { RoomPresenceParticipant } from "@tunetalk/shared/room-realtime";
 import type { RoomPlaybackState, RoomQueueItem } from "@tunetalk/shared/rooms";
 
 import type { SendChatResult } from "@/hooks/room-realtime-types";
 import { useRoomWebSocketBootstrap } from "@/hooks/use-room-websocket-bootstrap";
 import {
+  addRoomQueueItem,
+  getRoomAccessRequiredChatError,
+  insertRoomMessagePage,
+  removeRoomQueueItems,
+  toRoomChatMessage,
+} from "@/utils/room-realtime-event-helpers";
+import {
   type RoomMessagesPage,
-  insertRoomMessage,
   parseWsEvent,
 } from "@/utils/room-realtime-utils";
 
@@ -57,109 +60,80 @@ export function useRoomRealtime({
       const parsed = parseWsEvent(data);
       if (!parsed) return;
 
-      if (parsed.type === "ping") {
-        try {
-          ws.send("pong");
-        } catch {
-          // ignore
-        }
-        return;
-      }
-
-      if (parsed.type === "room_disbanded" && parsed.roomId === roomId) {
-        onRoomDisbanded?.();
-        void queryClient.invalidateQueries({ queryKey: ["rooms"] });
-        router.replace("/discover?toast=disbanded");
-        return;
-      }
-
-      if (parsed.type === "presence" && parsed.roomId === roomId) {
-        setParticipants(parsed.participants);
-        return;
-      }
-
-      if (parsed.type === "chat_error" && parsed.roomId === roomId) {
-        onChatError?.(parsed.error);
-        onAnnouncement?.(parsed.error);
-        return;
-      }
-
-      if (parsed.type === "playback_state" && parsed.roomId === roomId) {
-        setPlaybackState(parsed.playback);
-        return;
-      }
-
-      if (parsed.type === "queue_state" && parsed.roomId === roomId) {
-        setQueueState(parsed.queue);
-        return;
-      }
-
-      if (parsed.type === "queue_item_added" && parsed.roomId === roomId) {
-        setQueueState((current) => {
-          if (!current) return [parsed.item];
-          if (current.some((item) => item.id === parsed.item.id)) {
-            return current;
+      switch (parsed.type) {
+        case "ping":
+          try {
+            ws.send("pong");
+          } catch {
+            // ignore
           }
+          return;
 
-          return [...current, parsed.item].sort(
-            (a, b) => a.position - b.position
+        case "room_disbanded":
+          if (parsed.roomId !== roomId) return;
+          onRoomDisbanded?.();
+          void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+          router.replace("/discover?toast=disbanded");
+          return;
+
+        case "presence":
+          if (parsed.roomId !== roomId) return;
+          setParticipants(parsed.participants);
+          return;
+
+        case "chat_error":
+          if (parsed.roomId !== roomId) return;
+          onChatError?.(parsed.error);
+          onAnnouncement?.(parsed.error);
+          return;
+
+        case "playback_state":
+          if (parsed.roomId !== roomId) return;
+          setPlaybackState(parsed.playback);
+          return;
+
+        case "queue_state":
+          if (parsed.roomId !== roomId) return;
+          setQueueState(parsed.queue);
+          return;
+
+        case "queue_item_added":
+          if (parsed.roomId !== roomId) return;
+          setQueueState((current) => addRoomQueueItem(current, parsed.item));
+          return;
+
+        case "queue_items_removed":
+          if (parsed.roomId !== roomId) return;
+          setQueueState((current) =>
+            removeRoomQueueItems(current, parsed.itemIds)
           );
-        });
-        return;
-      }
+          return;
 
-      if (parsed.type === "queue_items_removed" && parsed.roomId === roomId) {
-        setQueueState((current) => {
-          if (!current) return current;
-          if (parsed.itemIds.length === 0) return current;
+        case "chat":
+          if (parsed.roomId !== roomId) return;
 
-          const removedIds = new Set(parsed.itemIds);
-          return current.filter((item) => !removedIds.has(item.id));
-        });
-        return;
-      }
-
-      if (parsed.type !== "chat" || parsed.roomId !== roomId) return;
-
-      if (parsed.sender.id !== sessionUserId) {
-        onAnnouncement?.(`New message from ${parsed.sender.name}.`);
-      }
-
-      const message: RoomChatMessage = {
-        id: parsed.id,
-        sender: parsed.sender,
-        text: parsed.text,
-        createdAt: parsed.createdAt,
-      };
-
-      queryClient.setQueryData<InfiniteData<RoomMessagesPage>>(
-        ["roomMessages", roomId],
-        (current) => {
-          const base =
-            current ??
-            ({
-              pages: [{ messages: [], nextCursor: null }],
-              pageParams: [undefined],
-            } satisfies InfiniteData<RoomMessagesPage>);
-
-          const nextPages =
-            base.pages.length > 0
-              ? [...base.pages]
-              : [{ messages: [], nextCursor: null }];
-
-          const firstPage = nextPages[0];
-          if (firstPage.messages.some((item) => item.id === message.id)) {
-            return base;
+          if (parsed.sender.id !== sessionUserId) {
+            onAnnouncement?.(`New message from ${parsed.sender.name}.`);
           }
 
-          nextPages[0] = {
-            ...firstPage,
-            messages: insertRoomMessage(firstPage.messages, message),
-          };
+          queryClient.setQueryData<InfiniteData<RoomMessagesPage>>(
+            ["roomMessages", roomId],
+            (current) =>
+              insertRoomMessagePage(
+                current,
+                toRoomChatMessage({
+                  id: parsed.id,
+                  sender: parsed.sender,
+                  text: parsed.text,
+                  createdAt: parsed.createdAt,
+                })
+              )
+          );
+          return;
 
-          return { ...base, pages: nextPages };
-        }
-      );
+        case "pong":
+          return;
+      }
     },
     [
       onAnnouncement,
@@ -174,11 +148,7 @@ export function useRoomRealtime({
 
   const handleSocketAccessDenied = useCallback(
     (reason: string) => {
-      onChatError?.(
-        reason === "Join room before connecting"
-          ? "Join the room from Discover first."
-          : "Room access required. Join again to chat."
-      );
+      onChatError?.(getRoomAccessRequiredChatError(reason));
       onAccessRequired?.(reason);
     },
     [onAccessRequired, onChatError]
