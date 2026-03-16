@@ -11,12 +11,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useRoomChatListState } from "@/hooks/use-room-chat-list-state";
-import { useRoomMessages } from "@/hooks/use-room-messages";
 import type {
   RoomWebSocketStatus,
   SendChatResult,
-} from "@/hooks/use-room-realtime";
+} from "@/hooks/room-realtime-types";
+import { useRoomChatListState } from "@/hooks/use-room-chat-list-state";
+import { useRoomMessages } from "@/hooks/use-room-messages";
 import { cn } from "@/utils/cn";
 import { formatMessageTime } from "@/utils/room-realtime-utils";
 import { getInitials } from "@/utils/string-utils";

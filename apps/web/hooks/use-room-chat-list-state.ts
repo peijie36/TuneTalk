@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { RoomChatMessage } from "@tunetalk/shared/room-realtime";
 
-import type { RoomWebSocketStatus } from "@/hooks/use-room-realtime";
+import type { RoomWebSocketStatus } from "@/hooks/room-realtime-types";
 import { isNearBottom } from "@/utils/room-realtime-utils";
 
 export function useRoomChatListState({

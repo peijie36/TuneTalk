@@ -3,7 +3,7 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   RoomChatMessage,
@@ -11,23 +11,13 @@ import type {
 } from "@tunetalk/shared/room-realtime";
 import type { RoomPlaybackState, RoomQueueItem } from "@tunetalk/shared/rooms";
 
-import { API_BASE_URL } from "@/lib/constants";
-
+import type { SendChatResult } from "@/hooks/room-realtime-types";
+import { useRoomWebSocketBootstrap } from "@/hooks/use-room-websocket-bootstrap";
 import {
   type RoomMessagesPage,
   insertRoomMessage,
   parseWsEvent,
-  toWebSocketUrl,
 } from "@/utils/room-realtime-utils";
-
-export type RoomWebSocketStatus =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "offline"
-  | "disconnected";
-
-export type SendChatResult = { ok: true } | { ok: false; error: string };
 
 export function useRoomRealtime({
   roomId,
@@ -48,105 +38,23 @@ export function useRoomRealtime({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptRef = useRef(0);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const accessDeniedReasonRef = useRef<string | null>(null);
 
   const [participants, setParticipants] = useState<RoomPresenceParticipant[]>(
     []
   );
-  const [wsStatus, setWsStatus] = useState<RoomWebSocketStatus>("idle");
-  const [wsStatusDetail, setWsStatusDetail] = useState<string | null>(null);
   const [playbackState, setPlaybackState] = useState<RoomPlaybackState | null>(
     null
   );
   const [queueState, setQueueState] = useState<RoomQueueItem[] | null>(null);
 
-  const clearReconnectTimer = useCallback(() => {
-    if (reconnectTimeoutRef.current === null) return;
-    window.clearTimeout(reconnectTimeoutRef.current);
-    reconnectTimeoutRef.current = null;
+  const handleSocketDisconnected = useCallback(() => {
+    setParticipants([]);
+    setQueueState(null);
   }, []);
 
-  const disconnect = useCallback(
-    (reason?: string) => {
-      clearReconnectTimer();
-      const ws = wsRef.current;
-      wsRef.current = null;
-      if (ws) {
-        try {
-          ws.close(1000, reason ?? "Disconnect");
-        } catch {
-          // ignore
-        }
-      }
-
-      setParticipants([]);
-      setQueueState(null);
-      setWsStatus("disconnected");
-      setWsStatusDetail(reason ?? null);
-    },
-    [clearReconnectTimer]
-  );
-
-  const connect = useCallback(() => {
-    if (!enabled) {
-      setWsStatus("disconnected");
-      setWsStatusDetail("Room not ready.");
-      return;
-    }
-
-    if (!sessionUserId) {
-      setWsStatus("disconnected");
-      setWsStatusDetail("Sign in to connect.");
-      return;
-    }
-
-    if (!navigator.onLine) {
-      setWsStatus("offline");
-      setWsStatusDetail("You're offline.");
-      return;
-    }
-
-    if (accessDeniedReasonRef.current) {
-      setWsStatus("disconnected");
-      setWsStatusDetail(accessDeniedReasonRef.current);
-      return;
-    }
-
-    clearReconnectTimer();
-
-    const existing = wsRef.current;
-    if (existing) {
-      wsRef.current = null;
-      try {
-        existing.close(1000, "Reconnecting");
-      } catch {
-        // ignore
-      }
-    }
-
-    const url = `${toWebSocketUrl(API_BASE_URL)}/api/rooms/${encodeURIComponent(roomId)}/ws`;
-    setWsStatus("connecting");
-    setWsStatusDetail(null);
-
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.addEventListener("open", () => {
-      if (wsRef.current !== ws) return;
-      accessDeniedReasonRef.current = null;
-      reconnectAttemptRef.current = 0;
-      setWsStatus("connected");
-      setWsStatusDetail(null);
-    });
-
-    ws.addEventListener("message", (event) => {
-      if (wsRef.current !== ws) return;
-      if (typeof event.data !== "string") return;
-
-      const parsed = parseWsEvent(event.data);
+  const handleSocketMessage = useCallback(
+    (data: string, ws: WebSocket) => {
+      const parsed = parseWsEvent(data);
       if (!parsed) return;
 
       if (parsed.type === "ping") {
@@ -189,8 +97,9 @@ export function useRoomRealtime({
       if (parsed.type === "queue_item_added" && parsed.roomId === roomId) {
         setQueueState((current) => {
           if (!current) return [parsed.item];
-          if (current.some((item) => item.id === parsed.item.id))
+          if (current.some((item) => item.id === parsed.item.id)) {
             return current;
+          }
 
           return [...current, parsed.item].sort(
             (a, b) => a.position - b.position
@@ -210,110 +119,80 @@ export function useRoomRealtime({
         return;
       }
 
-      if (parsed.type === "chat" && parsed.roomId === roomId) {
-        if (parsed.sender.id !== sessionUserId) {
-          onAnnouncement?.(`New message from ${parsed.sender.name}.`);
-        }
+      if (parsed.type !== "chat" || parsed.roomId !== roomId) return;
 
-        const message: RoomChatMessage = {
-          id: parsed.id,
-          sender: parsed.sender,
-          text: parsed.text,
-          createdAt: parsed.createdAt,
-        };
+      if (parsed.sender.id !== sessionUserId) {
+        onAnnouncement?.(`New message from ${parsed.sender.name}.`);
+      }
 
-        queryClient.setQueryData<InfiniteData<RoomMessagesPage>>(
-          ["roomMessages", roomId],
-          (current) => {
-            const base =
-              current ??
-              ({
-                pages: [{ messages: [], nextCursor: null }],
-                pageParams: [undefined],
-              } satisfies InfiniteData<RoomMessagesPage>);
+      const message: RoomChatMessage = {
+        id: parsed.id,
+        sender: parsed.sender,
+        text: parsed.text,
+        createdAt: parsed.createdAt,
+      };
 
-            const nextPages =
-              base.pages.length > 0
-                ? [...base.pages]
-                : [{ messages: [], nextCursor: null }];
+      queryClient.setQueryData<InfiniteData<RoomMessagesPage>>(
+        ["roomMessages", roomId],
+        (current) => {
+          const base =
+            current ??
+            ({
+              pages: [{ messages: [], nextCursor: null }],
+              pageParams: [undefined],
+            } satisfies InfiniteData<RoomMessagesPage>);
 
-            const firstPage = nextPages[0];
-            if (firstPage.messages.some((m) => m.id === message.id)) {
-              return base;
-            }
+          const nextPages =
+            base.pages.length > 0
+              ? [...base.pages]
+              : [{ messages: [], nextCursor: null }];
 
-            nextPages[0] = {
-              ...firstPage,
-              messages: insertRoomMessage(firstPage.messages, message),
-            };
-
-            return { ...base, pages: nextPages };
+          const firstPage = nextPages[0];
+          if (firstPage.messages.some((item) => item.id === message.id)) {
+            return base;
           }
-        );
-      }
+
+          nextPages[0] = {
+            ...firstPage,
+            messages: insertRoomMessage(firstPage.messages, message),
+          };
+
+          return { ...base, pages: nextPages };
+        }
+      );
+    },
+    [
+      onAnnouncement,
+      onChatError,
+      onRoomDisbanded,
+      queryClient,
+      roomId,
+      router,
+      sessionUserId,
+    ]
+  );
+
+  const handleSocketAccessDenied = useCallback(
+    (reason: string) => {
+      onChatError?.(
+        reason === "Join room before connecting"
+          ? "Join the room from Discover first."
+          : "Room access required. Join again to chat."
+      );
+      onAccessRequired?.(reason);
+    },
+    [onAccessRequired, onChatError]
+  );
+
+  const { wsRef, wsStatus, wsStatusDetail, markOffline } =
+    useRoomWebSocketBootstrap({
+      roomId,
+      enabled,
+      sessionUserId,
+      onMessage: handleSocketMessage,
+      onDisconnected: handleSocketDisconnected,
+      onAccessDenied: handleSocketAccessDenied,
     });
-
-    ws.addEventListener("close", (event) => {
-      if (wsRef.current !== ws) return;
-      wsRef.current = null;
-      setParticipants([]);
-      setQueueState(null);
-
-      if (event.code === 1008) {
-        const reason = event.reason || "Room access required.";
-        accessDeniedReasonRef.current = reason;
-        setWsStatus("disconnected");
-        setWsStatusDetail(reason);
-        onChatError?.(
-          reason === "Join room before connecting"
-            ? "Join the room from Discover first."
-            : "Room access required. Join again to chat."
-        );
-        onAccessRequired?.(reason);
-        return;
-      }
-
-      if (!navigator.onLine) {
-        setWsStatus("offline");
-        setWsStatusDetail("You're offline.");
-        return;
-      }
-
-      setWsStatus("disconnected");
-      setWsStatusDetail(event.reason || "Disconnected. Reconnecting...");
-
-      if (!enabled || !sessionUserId) return;
-      const attempt = reconnectAttemptRef.current;
-      const baseDelay = Math.min(15_000, 500 * 2 ** attempt);
-      const jitter = Math.floor(Math.random() * 250);
-      const delay = baseDelay + jitter;
-      reconnectAttemptRef.current = Math.min(attempt + 1, 6);
-
-      clearReconnectTimer();
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        if (!enabled || !sessionUserId) return;
-        if (wsRef.current) return;
-        connect();
-      }, delay);
-    });
-
-    ws.addEventListener("error", () => {
-      if (wsRef.current !== ws) return;
-      setWsStatus("disconnected");
-      setWsStatusDetail("Connection error. Reconnecting...");
-    });
-  }, [
-    clearReconnectTimer,
-    enabled,
-    onAccessRequired,
-    onAnnouncement,
-    onChatError,
-    onRoomDisbanded,
-    queryClient,
-    roomId,
-    router,
-    sessionUserId,
-  ]);
 
   const sendChat = useCallback(
     (text: string): SendChatResult => {
@@ -323,8 +202,7 @@ export function useRoomRealtime({
       if (!enabled) return { ok: false, error: "Room not ready." };
 
       if (!navigator.onLine) {
-        setWsStatus("offline");
-        setWsStatusDetail("You're offline.");
+        markOffline();
         return { ok: false, error: "You're offline." };
       }
 
@@ -340,67 +218,14 @@ export function useRoomRealtime({
         return { ok: false, error: "Failed to send message." };
       }
     },
-    [enabled, sessionUserId]
+    [enabled, markOffline, sessionUserId, wsRef]
   );
 
   useEffect(() => {
-    accessDeniedReasonRef.current = null;
+    setParticipants([]);
     setQueueState(null);
     setPlaybackState(null);
   }, [roomId]);
-
-  useEffect(() => {
-    if (!enabled) {
-      if (wsRef.current) disconnect("Room unavailable.");
-      return;
-    }
-
-    if (!sessionUserId) {
-      if (wsRef.current) disconnect("Signed out.");
-      return;
-    }
-
-    if (wsRef.current) return;
-    connect();
-  }, [connect, disconnect, enabled, sessionUserId]);
-
-  useEffect(() => {
-    if (!enabled || !sessionUserId) return;
-
-    const handleOnline = () => {
-      if (!enabled || !sessionUserId) return;
-      if (wsRef.current) return;
-      connect();
-    };
-
-    const handleOffline = () => {
-      clearReconnectTimer();
-      setWsStatus("offline");
-      setWsStatusDetail("You're offline.");
-    };
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, [clearReconnectTimer, connect, enabled, sessionUserId]);
-
-  useEffect(() => {
-    return () => {
-      clearReconnectTimer();
-      const ws = wsRef.current;
-      wsRef.current = null;
-      if (!ws) return;
-      try {
-        ws.close(1000, "Leaving room");
-      } catch {
-        // ignore
-      }
-    };
-  }, [clearReconnectTimer]);
 
   return {
     participants,

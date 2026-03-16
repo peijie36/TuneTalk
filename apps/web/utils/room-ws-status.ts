@@ -1,4 +1,4 @@
-import type { RoomWebSocketStatus } from "@/hooks/use-room-realtime";
+import type { RoomWebSocketStatus } from "@/hooks/room-realtime-types";
 
 export function getRoomWsStatusDotClass(
   wsStatus: RoomWebSocketStatus,

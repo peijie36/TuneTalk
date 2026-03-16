@@ -17,7 +17,7 @@ import {
 } from "@/utils/room-ws-status";
 import { getInitials } from "@/utils/string-utils";
 
-import type { RoomWebSocketStatus } from "@/hooks/use-room-realtime";
+import type { RoomWebSocketStatus } from "@/hooks/room-realtime-types";
 
 interface RoomInfoSidebarCardProps {
   roomId: string;
