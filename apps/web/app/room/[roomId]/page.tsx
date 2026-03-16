@@ -1,190 +1,23 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 
-import { ApiError, leaveRoom, type RoomQueueItemDto } from "@/api/rooms";
-import { useFetchRoom } from "@/hooks/use-fetch-room";
-import { authClient } from "@/lib/auth-client";
-import { useHostRoomResumeStore } from "@/stores/host-room-resume";
-
-import { useRoomRealtime } from "@/hooks/use-room-realtime";
+import { useRoomPageState } from "@/hooks/use-room-page-state";
 import RoomChatCard from "./_components/room-chat-card";
 import RoomInfoSidebarCard from "./_components/room-info-sidebar-card";
 import RoomNowPlayingCard from "./_components/room-now-playing-card";
 import RoomPageHeader from "./_components/room-page-header";
 
 export default function RoomPage() {
-  const routeParams = useParams<{ roomId?: string | string[] }>();
-  const roomId = useMemo(() => {
-    return typeof routeParams.roomId === "string"
-      ? routeParams.roomId
-      : Array.isArray(routeParams.roomId)
-        ? (routeParams.roomId[0] ?? "unknown")
-        : "unknown";
-  }, [routeParams.roomId]);
-
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { data: session, isPending: isSessionPending } =
-    authClient.useSession();
-  const sessionUserId = session?.user?.id ?? null;
-  const setHostedRoom = useHostRoomResumeStore((state) => state.setHostedRoom);
-  const clearHostedRoom = useHostRoomResumeStore(
-    (state) => state.clearHostedRoom
-  );
-
   const [musicQuery, setMusicQuery] = useState("");
-  const leavingIntentRef = useRef(false);
-  const prevPlaybackQueueItemIdRef = useRef<string | null>(null);
-
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [liveAnnouncement, setLiveAnnouncement] = useState("");
-  const [queue, setQueue] = useState<RoomQueueItemDto[]>([]);
-
-  const roomQuery = useFetchRoom(roomId);
-  const room = roomQuery.data ?? null;
-  const isLoadingRoom = roomQuery.isFetching && !roomQuery.data;
-
-  const roomApiError =
-    roomQuery.error instanceof ApiError ? roomQuery.error : null;
-  const isRoomNotFound = roomApiError?.status === 404;
-  const requiresRoomAccess =
-    roomApiError?.status === 401 || roomApiError?.status === 403;
-
-  const roomReady = !!room && !isRoomNotFound && !requiresRoomAccess;
-
-  const leaveMutation = useMutation({
-    mutationFn: async () => {
-      if (!roomId || roomId === "unknown") throw new Error("Missing room id");
-      return await leaveRoom(roomId);
-    },
-    onError: () => {
-      leavingIntentRef.current = false;
-    },
-    onSuccess: (result) => {
-      clearHostedRoom();
-      void queryClient.invalidateQueries({ queryKey: ["rooms"] });
-
-      router.replace(
-        "disbanded" in result && result.disbanded
-          ? "/discover?toast=disbanded"
-          : "/discover"
-      );
-    },
-  });
-
-  const isLeaving = leaveMutation.isPending;
-  const handleRealtimeAccessRequired = useCallback(
-    (reason: string) => {
-      if (leavingIntentRef.current) return;
-      if (reason === "Join room before connecting") {
-        router.replace("/discover?toast=join_required");
-        return;
-      }
-      router.replace("/discover?toast=password_required");
-    },
-    [router]
-  );
-
-  const handleLeave = useCallback(() => {
-    if (leaveMutation.isPending) return;
-    leavingIntentRef.current = true;
-    leaveMutation.mutate();
-  }, [leaveMutation]);
-
-  const realtimeEnabled = roomReady && !isLeaving;
-  const {
-    participants,
-    wsStatus,
-    wsStatusDetail,
-    sendChat,
-    playbackState,
-    queueState,
-  } = useRoomRealtime({
-    roomId,
-    enabled: realtimeEnabled,
-    sessionUserId,
-    onChatError: setChatError,
-    onAnnouncement: setLiveAnnouncement,
-    onAccessRequired: handleRealtimeAccessRequired,
-    onRoomDisbanded: clearHostedRoom,
-  });
-
-  const roomName =
-    room?.name ??
-    (isRoomNotFound
-      ? "Room not found"
-      : requiresRoomAccess
-        ? "Private room"
-        : "Room");
-  const hostName = room?.host.name ?? "Unknown";
-  const visibility =
-    room?.visibility ?? (requiresRoomAccess && !room ? "private" : "public");
-
-  const participantStats = room?.participants ?? null;
-  const participantCurrent =
-    wsStatus === "connected"
-      ? participants.length
-      : (participantStats?.current ?? null);
-  const participantCapacity = participantStats?.capacity ?? null;
-  const isHost = participants.some(
-    (p) => p.id === sessionUserId && p.role === "host"
-  );
-
-  useEffect(() => {
-    if (!roomReady || !isHost || !sessionUserId || !room) return;
-    setHostedRoom({
-      roomId,
-      roomName: room.name,
-      hostUserId: sessionUserId,
-    });
-  }, [isHost, room, roomId, roomReady, sessionUserId, setHostedRoom]);
-
-  useEffect(() => {
-    if (!queueState) return;
-    setQueue(queueState);
-  }, [queueState]);
-
-  useEffect(() => {
-    if (!roomReady) return;
-
-    const previousQueueItemId = prevPlaybackQueueItemIdRef.current;
-    const currentQueueItemId = playbackState?.queueItemId ?? null;
-    prevPlaybackQueueItemIdRef.current = currentQueueItemId;
-
-    setQueue((current) => {
-      if (currentQueueItemId) {
-        const currentIndex = current.findIndex(
-          (item) => item.id === currentQueueItemId
-        );
-        return currentIndex > 0 ? current.slice(currentIndex) : current;
-      }
-
-      if (previousQueueItemId) {
-        const previousIndex = current.findIndex(
-          (item) => item.id === previousQueueItemId
-        );
-        return previousIndex >= 0 ? current.slice(previousIndex + 1) : current;
-      }
-
-      return current;
-    });
-  }, [playbackState?.queueItemId, roomReady]);
-  const leaveDisabled =
-    isLeaving ||
-    isSessionPending ||
-    !sessionUserId ||
-    requiresRoomAccess ||
-    isRoomNotFound;
+  const roomPage = useRoomPageState();
 
   return (
     <div className="bg-background relative min-h-screen">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
       <RoomPageHeader
-        roomId={roomId}
+        roomId={roomPage.roomId}
         musicQuery={musicQuery}
         onMusicQueryChange={setMusicQuery}
       />
@@ -197,45 +30,45 @@ export default function RoomPage() {
           <div className="grid gap-8 lg:h-full lg:min-h-0 lg:grid-cols-[340px_1fr] lg:items-start">
             <div className="space-y-6 lg:min-h-0">
               <RoomInfoSidebarCard
-                roomId={roomId}
-                roomName={roomName}
-                hostName={hostName}
-                visibility={visibility}
-                participantCurrent={participantCurrent}
-                participantCapacity={participantCapacity}
-                isLoadingRoom={isLoadingRoom}
-                sessionUserId={sessionUserId}
-                filteredParticipants={participants}
-                wsStatus={wsStatus}
-                wsStatusDetail={wsStatusDetail}
-                onLeave={handleLeave}
-                leaveDisabled={leaveDisabled}
-                isLeaving={isLeaving}
+                roomId={roomPage.roomId}
+                roomName={roomPage.roomName}
+                hostName={roomPage.hostName}
+                visibility={roomPage.visibility}
+                participantCurrent={roomPage.participantCurrent}
+                participantCapacity={roomPage.participantCapacity}
+                isLoadingRoom={roomPage.isLoadingRoom}
+                sessionUserId={roomPage.sessionUserId}
+                filteredParticipants={roomPage.participants}
+                wsStatus={roomPage.wsStatus}
+                wsStatusDetail={roomPage.wsStatusDetail}
+                onLeave={roomPage.onLeave}
+                leaveDisabled={roomPage.leaveDisabled}
+                isLeaving={roomPage.isLeaving}
               />
             </div>
 
             <div className="space-y-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
               <RoomNowPlayingCard
-                roomId={roomId}
-                queue={queue}
-                playbackState={playbackState}
-                isHost={isHost}
+                roomId={roomPage.roomId}
+                queue={roomPage.queue}
+                playbackState={roomPage.playbackState}
+                isHost={roomPage.isHost}
               />
 
               <div className="flex min-h-0 flex-1 flex-col">
                 <RoomChatCard
-                  roomId={roomId}
-                  roomReady={realtimeEnabled}
-                  isRoomNotFound={isRoomNotFound}
-                  requiresRoomAccess={requiresRoomAccess}
-                  roomApiErrorMessage={roomApiError?.message ?? null}
-                  sessionUserId={sessionUserId}
-                  wsStatus={wsStatus}
-                  wsStatusDetail={wsStatusDetail}
-                  sendChat={sendChat}
-                  chatError={chatError}
-                  setChatError={setChatError}
-                  liveAnnouncement={liveAnnouncement}
+                  roomId={roomPage.roomId}
+                  roomReady={roomPage.realtimeEnabled}
+                  isRoomNotFound={roomPage.isRoomNotFound}
+                  requiresRoomAccess={roomPage.requiresRoomAccess}
+                  roomApiErrorMessage={roomPage.roomApiErrorMessage}
+                  sessionUserId={roomPage.sessionUserId}
+                  wsStatus={roomPage.wsStatus}
+                  wsStatusDetail={roomPage.wsStatusDetail}
+                  sendChat={roomPage.sendChat}
+                  chatError={roomPage.chatError}
+                  setChatError={roomPage.setChatError}
+                  liveAnnouncement={roomPage.liveAnnouncement}
                 />
               </div>
             </div>
