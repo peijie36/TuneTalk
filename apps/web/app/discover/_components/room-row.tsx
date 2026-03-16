@@ -19,6 +19,9 @@ export interface RoomRowProps {
 
 function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
   const isFull = room.participants.current >= room.participants.capacity;
+  const hasQueuedTrack =
+    room.nowPlaying.title !== "Nothing playing" &&
+    room.nowPlaying.artist !== "Queue idle";
 
   const handleSelect = useCallback(() => {
     onSelect(room.id);
@@ -44,8 +47,8 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
       tabIndex={0}
       aria-pressed={isSelected}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
-        <div className="min-w-0 space-y-1">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6">
+        <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-text-strong truncate text-base font-semibold">
               {room.name}
@@ -68,27 +71,32 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:items-end">
-          <div className="text-text-strong text-sm sm:max-w-[320px] sm:text-right">
-            <div className="text-muted-foreground font-medium">Now Playing</div>
-            <div className="truncate font-semibold">
-              {room.nowPlaying.title}
+        <div className="flex items-center justify-between gap-4 sm:justify-end">
+          <div className="min-w-0 text-left text-sm sm:w-[220px] sm:text-right">
+            <div className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Now Playing
             </div>
-            <div className="text-muted-foreground truncate">
-              {room.nowPlaying.artist}
-            </div>
+            {hasQueuedTrack ? (
+              <>
+                <div className="text-text-strong truncate font-semibold">
+                  {room.nowPlaying.title}
+                </div>
+                <div className="text-muted-foreground truncate">
+                  {room.nowPlaying.artist}
+                </div>
+              </>
+            ) : (
+              <div className="text-muted-foreground pt-0.5">Nothing queued</div>
+            )}
           </div>
-
-          <div className="flex items-center justify-end">
-            <Button
-              size="sm"
-              onClick={handleJoinClick}
-              aria-label={`Join ${room.name}`}
-              disabled={isFull}
-            >
-              Join
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            onClick={handleJoinClick}
+            aria-label={`Join ${room.name}`}
+            disabled={isFull}
+          >
+            Join
+          </Button>
         </div>
       </div>
     </div>

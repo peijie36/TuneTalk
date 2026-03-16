@@ -20,38 +20,16 @@ import type {
 import { cn } from "@/utils/cn";
 import { mergeRoomMessagePages } from "@/utils/room-messages";
 import { formatMessageTime, isNearBottom } from "@/utils/room-realtime-utils";
-import {
-  getRoomWsStatusDotClass,
-  getRoomWsStatusLabel,
-} from "@/utils/room-ws-status";
 import { getInitials } from "@/utils/string-utils";
 
 type RoomMessagesQuery = ReturnType<typeof useRoomMessages>;
 
-function ChatHeader({
-  sessionUserId,
-  wsStatus,
-}: {
-  sessionUserId: string | null;
-  wsStatus: RoomWebSocketStatus;
-}) {
+function ChatHeader() {
   return (
-    <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+    <CardHeader className="px-4 pt-4 pb-2">
       <CardTitle className="text-text-strong text-base font-semibold">
         Chat
       </CardTitle>
-      <div className="flex items-center gap-2">
-        <div className="text-muted-foreground flex items-center gap-2 text-xs font-semibold">
-          <span
-            className={cn(
-              "h-2 w-2 rounded-full",
-              getRoomWsStatusDotClass(wsStatus, sessionUserId)
-            )}
-            aria-hidden="true"
-          />
-          <span>{getRoomWsStatusLabel(wsStatus, sessionUserId)}</span>
-        </div>
-      </div>
     </CardHeader>
   );
 }
@@ -177,7 +155,7 @@ function ChatMessageList({
       <div className="relative min-h-0 flex-1">
         <div
           ref={chatScrollRef}
-          className="border-border/70 tt-scrollbar-hidden h-full min-h-0 overflow-y-auto rounded-2xl border bg-white/80 p-4 shadow-inner"
+          className="border-border/70 tt-scrollbar-hidden h-full min-h-0 overflow-y-auto rounded-2xl border bg-white/80 p-3 shadow-inner"
           onScroll={handleChatScroll}
         >
           {!sessionUserId ? (
@@ -413,9 +391,9 @@ export default function RoomChatCard({
 
   return (
     <Card className="border-border/70 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border bg-white/70 shadow-sm backdrop-blur">
-      <ChatHeader sessionUserId={sessionUserId} wsStatus={wsStatus} />
+      <ChatHeader />
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 pt-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 px-4 pt-0 pb-4">
         {isRoomNotFound ? (
           <div className="space-y-3 rounded-2xl border border-white/30 bg-white/15 p-4">
             <p className="text-text-strong text-sm font-semibold">

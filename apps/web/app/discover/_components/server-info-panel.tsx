@@ -14,6 +14,10 @@ export default function ServerInfoPanel({
   canJoinSelected: boolean;
   onJoinRoom: (roomId: string) => void;
 }) {
+  const hasQueuedTrack =
+    selectedRoom?.nowPlaying.title !== "Nothing playing" &&
+    selectedRoom?.nowPlaying.artist !== "Queue idle";
+
   return (
     <Card className="bg-surface/80 border-border/70 flex h-[400px] flex-col rounded-[28px] border shadow-sm backdrop-blur lg:h-[460px]">
       <CardHeader className="pb-4 text-center">
@@ -55,7 +59,9 @@ export default function ServerInfoPanel({
           </p>
           <p className="text-text-strong text-sm font-semibold">
             {selectedRoom
-              ? `${selectedRoom.nowPlaying.title} - ${selectedRoom.nowPlaying.artist}`
+              ? hasQueuedTrack
+                ? `${selectedRoom.nowPlaying.title} - ${selectedRoom.nowPlaying.artist}`
+                : "Nothing queued"
               : "Select a room"}
           </p>
         </div>
