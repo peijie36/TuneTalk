@@ -8,6 +8,11 @@ export function useRoomMusicSearch({ roomId }: { roomId: string }) {
   const [musicQuery, setMusicQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const clearSearch = useCallback(() => {
+    setMusicQuery("");
+    setSearchQuery("");
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setSearchQuery(musicQuery.trim());
@@ -34,7 +39,7 @@ export function useRoomMusicSearch({ roomId }: { roomId: string }) {
         durationSec: track.durationSec,
       }),
     onSuccess: () => {
-      setMusicQuery("");
+      clearSearch();
     },
   });
 
@@ -55,6 +60,7 @@ export function useRoomMusicSearch({ roomId }: { roomId: string }) {
   return {
     musicQuery,
     setMusicQuery,
+    clearSearch,
     results: searchResults.data ?? [],
     searchError:
       searchResults.error instanceof Error ? searchResults.error : null,
