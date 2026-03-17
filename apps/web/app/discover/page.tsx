@@ -121,12 +121,14 @@ const DiscoverFilterBar = memo(function DiscoverFilterBar({
 const DiscoverRoomList = memo(function DiscoverRoomList({
   rooms,
   selectedRoomId,
+  joiningRoomId,
   onSelectRoom,
   onJoinRoom,
   onReset,
 }: {
   rooms: RoomSummary[];
   selectedRoomId: string;
+  joiningRoomId: string | null;
   onSelectRoom: (roomId: string) => void;
   onJoinRoom: (roomId: string) => void;
   onReset: () => void;
@@ -153,6 +155,7 @@ const DiscoverRoomList = memo(function DiscoverRoomList({
             key={room.id}
             room={room}
             isSelected={room.id === selectedRoomId}
+            isJoining={room.id === joiningRoomId}
             onSelect={onSelectRoom}
             onJoin={onJoinRoom}
           />
@@ -221,6 +224,7 @@ const DiscoverPagination = memo(function DiscoverPagination({
 const DiscoverActionBar = memo(function DiscoverActionBar({
   isSessionPending,
   canJoinSelected,
+  isJoiningSelected,
   isRoomsFetching,
   onCreate,
   onJoinSelected,
@@ -228,6 +232,7 @@ const DiscoverActionBar = memo(function DiscoverActionBar({
 }: {
   isSessionPending: boolean;
   canJoinSelected: boolean;
+  isJoiningSelected: boolean;
   isRoomsFetching: boolean;
   onCreate: () => void;
   onJoinSelected: () => void;
@@ -248,10 +253,10 @@ const DiscoverActionBar = memo(function DiscoverActionBar({
         <Button
           type="button"
           className="h-12 px-10"
-          disabled={!canJoinSelected}
+          disabled={!canJoinSelected || isJoiningSelected}
           onClick={onJoinSelected}
         >
-          Join
+          {isJoiningSelected ? "Joining..." : "Join"}
         </Button>
         <Button
           type="button"
@@ -310,6 +315,7 @@ export default function DiscoverPage() {
   const createRoom = useCreateRoom();
 
   const joinRoom = useJoinRoom();
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [joinModalRoomId, setJoinModalRoomId] = useState<string | null>(null);
   const [joinModalRoomName, setJoinModalRoomName] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
@@ -407,6 +413,8 @@ export default function DiscoverPage() {
     !!selectedRoom &&
     selectedRoom.participants.current < selectedRoom.participants.capacity &&
     !isSessionPending;
+  const isJoiningSelected =
+    joiningRoomId !== null && joiningRoomId === selectedRoomId;
 
   const pageCount = useMemo(() => {
     if (rooms.length === 0) return 0;
@@ -416,6 +424,11 @@ export default function DiscoverPage() {
   useEffect(() => {
     setPageIndex(0);
   }, [filter, deferredQuery]);
+
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    void router.prefetch(`/room/${selectedRoomId}`);
+  }, [router, selectedRoomId]);
 
   useEffect(() => {
     const toastKey = searchParams.get("toast");
@@ -478,7 +491,7 @@ export default function DiscoverPage() {
 
   const handleJoinRoom = useCallback(
     (roomId: string) => {
-      if (isSessionPending) return;
+      if (isSessionPending || joiningRoomId || joinRoom.isJoining) return;
       if (!session) {
         router.push(
           `/signin?callbackURL=${encodeURIComponent(`/room/${roomId}`)}`
@@ -486,6 +499,7 @@ export default function DiscoverPage() {
         return;
       }
 
+      setJoiningRoomId(roomId);
       setSelectedRoomId(roomId);
 
       void (async () => {
@@ -493,6 +507,7 @@ export default function DiscoverPage() {
         if (!result.ok) {
           if (result.requiresPassword) {
             const name = roomLookup.get(roomId)?.name ?? "Room";
+            setJoiningRoomId(null);
             setJoinModalRoomId(roomId);
             setJoinModalRoomName(name);
             setJoinPassword("");
@@ -500,6 +515,7 @@ export default function DiscoverPage() {
             return;
           }
 
+          setJoiningRoomId(null);
           toast.error(result.error);
           return;
         }
@@ -507,7 +523,7 @@ export default function DiscoverPage() {
         router.push(`/room/${roomId}`);
       })();
     },
-    [isSessionPending, joinRoom, roomLookup, router, session]
+    [isSessionPending, joinRoom, joiningRoomId, roomLookup, router, session]
   );
 
   const handleJoinWithPassword = useCallback(() => {
@@ -522,11 +538,13 @@ export default function DiscoverPage() {
         return;
       }
 
+      setJoiningRoomId(joinModalRoomId);
       const result = await joinRoom.attemptJoin(
         joinModalRoomId,
         passwordTrimmed
       );
       if (!result.ok) {
+        setJoiningRoomId(null);
         setJoinError(result.error);
         return;
       }
@@ -645,6 +663,7 @@ export default function DiscoverPage() {
               <ServerInfoPanel
                 selectedRoom={selectedRoom}
                 canJoinSelected={canJoinSelected}
+                isJoiningSelected={isJoiningSelected}
                 onJoinRoom={handleJoinRoom}
               />
             </div>
@@ -666,6 +685,7 @@ export default function DiscoverPage() {
               <DiscoverRoomList
                 rooms={pagedRooms}
                 selectedRoomId={selectedRoomId}
+                joiningRoomId={joiningRoomId}
                 onSelectRoom={handleSelectRoom}
                 onJoinRoom={handleJoinRoom}
                 onReset={handleReset}
@@ -684,6 +704,7 @@ export default function DiscoverPage() {
               <DiscoverActionBar
                 isSessionPending={isSessionPending}
                 canJoinSelected={canJoinSelected}
+                isJoiningSelected={isJoiningSelected}
                 isRoomsFetching={isRoomsFetching}
                 onCreate={handleCreateClick}
                 onJoinSelected={handleJoinSelected}

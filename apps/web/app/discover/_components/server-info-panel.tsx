@@ -10,10 +10,12 @@ import type { RoomSummary } from "@tunetalk/shared/rooms";
 function ServerInfoPanel({
   selectedRoom,
   canJoinSelected,
+  isJoiningSelected,
   onJoinRoom,
 }: {
   selectedRoom: RoomSummary | null;
   canJoinSelected: boolean;
+  isJoiningSelected: boolean;
   onJoinRoom: (roomId: string) => void;
 }) {
   const hasQueuedTrack =
@@ -72,8 +74,9 @@ function ServerInfoPanel({
           <Button
             className="mt-auto h-12 w-full max-w-[190px]"
             onClick={() => onJoinRoom(selectedRoom.id)}
+            disabled={isJoiningSelected}
           >
-            Join
+            {isJoiningSelected ? "Joining..." : "Join"}
           </Button>
         ) : (
           <Button className="mt-auto h-12 w-full max-w-[190px]" disabled>

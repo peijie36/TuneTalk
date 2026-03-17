@@ -13,11 +13,18 @@ import type { RoomSummary } from "@tunetalk/shared/rooms";
 export interface RoomRowProps {
   room: RoomSummary;
   isSelected: boolean;
+  isJoining: boolean;
   onSelect: (roomId: string) => void;
   onJoin: (roomId: string) => void;
 }
 
-function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
+function RoomRow({
+  room,
+  isSelected,
+  isJoining,
+  onSelect,
+  onJoin,
+}: RoomRowProps) {
   const isFull = room.participants.current >= room.participants.capacity;
   const hasQueuedTrack =
     room.nowPlaying.title !== "Nothing playing" &&
@@ -93,9 +100,9 @@ function RoomRow({ room, isSelected, onSelect, onJoin }: RoomRowProps) {
             size="sm"
             onClick={handleJoinClick}
             aria-label={`Join ${room.name}`}
-            disabled={isFull}
+            disabled={isFull || isJoining}
           >
-            Join
+            {isJoining ? "Joining..." : "Join"}
           </Button>
         </div>
       </div>
