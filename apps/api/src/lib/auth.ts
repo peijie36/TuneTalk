@@ -7,6 +7,11 @@ import { openAPI } from "better-auth/plugins";
 import { env } from "@/src/lib/env";
 
 const webOrigin = env.WEB_ORIGIN;
+const authOrigin = env.BETTER_AUTH_URL;
+const webUrl = new URL(webOrigin);
+const authUrl = new URL(authOrigin);
+const isCrossOriginAuth = webUrl.origin !== authUrl.origin;
+const usesSecureCookies = authUrl.protocol === "https:";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -16,6 +21,17 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
+  },
+  advanced: {
+    useSecureCookies: usesSecureCookies,
+    defaultCookieAttributes:
+      isCrossOriginAuth && usesSecureCookies
+        ? {
+            sameSite: "none",
+            secure: true,
+            partitioned: true,
+          }
+        : undefined,
   },
   trustedOrigins: [webOrigin],
   plugins: [openAPI()],
