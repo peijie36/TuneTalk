@@ -219,6 +219,46 @@
 }
 
 @layer components {
+  .tt-slider {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+  }
+
+  .tt-slider::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    border-radius: 999px;
+    background: var(--tt-slider-track);
+  }
+
+  .tt-slider::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: -0.375rem;
+    border: none;
+    border-radius: 999px;
+    background: #1d4ed8;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.2);
+  }
+
+  .tt-slider::-moz-range-track {
+    height: 0.5rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--tt-slider-track);
+  }
+
+  .tt-slider::-moz-range-thumb {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: none;
+    border-radius: 999px;
+    background: #1d4ed8;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.2);
+  }
+
   .tt-hero-surface {
     background: linear-gradient(
       120deg,

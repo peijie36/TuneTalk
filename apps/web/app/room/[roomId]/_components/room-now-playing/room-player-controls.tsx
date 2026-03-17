@@ -1,6 +1,7 @@
 "use client";
 
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -44,8 +45,17 @@ export default function RoomPlayerControls({
   onTogglePlayPause,
   onVolumeChange,
 }: RoomPlayerControlsProps) {
+  const seekSliderStyle = {
+    "--tt-slider-track": `linear-gradient(to right, rgb(15 23 42) 0%, rgb(15 23 42) ${progressPercent}%, rgb(226 232 240) ${progressPercent}%, rgb(226 232 240) 100%)`,
+  } as CSSProperties;
+
+  const volumePercent = (isMuted ? 0 : volume) * 100;
+  const volumeSliderStyle = {
+    "--tt-slider-track": `linear-gradient(to right, rgb(15 23 42) 0%, rgb(15 23 42) ${volumePercent}%, rgb(226 232 240) ${volumePercent}%, rgb(226 232 240) 100%)`,
+  } as CSSProperties;
+
   return (
-    <div className="border-border/70 rounded-[22px] border bg-white/85 px-3 py-2.5 shadow-inner">
+    <div className="border-border/70 rounded-[22px] border bg-white/85 px-3 pt-2.5 pb-5 shadow-inner">
       <div className="flex items-center gap-3">
         <Button
           type="button"
@@ -63,63 +73,67 @@ export default function RoomPlayerControls({
         </Button>
 
         <div className="min-w-0 flex-1">
-          <input
-            type="range"
-            min={0}
-            max={durationSec || 0}
-            step={1}
-            value={Math.min(scrubPositionSec ?? currentTimeSec, durationSec)}
-            disabled={!canSeek}
-            aria-label="Playback position"
-            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-transparent disabled:cursor-default"
-            style={{
-              background: `linear-gradient(to right, rgb(15 23 42) 0%, rgb(15 23 42) ${progressPercent}%, rgb(226 232 240) ${progressPercent}%, rgb(226 232 240) 100%)`,
-            }}
-            onChange={(event) => {
-              if (!canSeek) return;
-              onScrubChange(Number(event.target.value));
-            }}
-            onMouseUp={onScrubCommit}
-            onTouchEnd={onScrubCommit}
-            onKeyUp={onScrubCommit}
-          />
-          <div className="text-muted-foreground mt-1 flex items-center justify-between text-[11px] font-medium tabular-nums">
-            <span>
-              {formatPlaybackTime(scrubPositionSec ?? currentTimeSec)}
-            </span>
-            <span>{formatPlaybackTime(durationSec)}</span>
-          </div>
-        </div>
+          <div className="flex h-8 -translate-y-1 items-center gap-3">
+            <div className="relative min-w-0 flex-1">
+              <input
+                type="range"
+                min={0}
+                max={durationSec || 0}
+                step={1}
+                value={Math.min(
+                  scrubPositionSec ?? currentTimeSec,
+                  durationSec
+                )}
+                disabled={!canSeek}
+                aria-label="Playback position"
+                className="tt-slider h-2 w-full cursor-pointer rounded-full disabled:cursor-default"
+                style={seekSliderStyle}
+                onChange={(event) => {
+                  if (!canSeek) return;
+                  onScrubChange(Number(event.target.value));
+                }}
+                onMouseUp={onScrubCommit}
+                onTouchEnd={onScrubCommit}
+                onKeyUp={onScrubCommit}
+              />
 
-        <div className="hidden items-center gap-2 sm:flex">
-          <button
-            type="button"
-            className="text-text-strong inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-            onClick={onToggleMuted}
-            disabled={!hasActiveTrack}
-            aria-label={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted || volume === 0 ? (
-              <VolumeX className="h-4 w-4" />
-            ) : (
-              <Volume2 className="h-4 w-4" />
-            )}
-          </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={isMuted ? 0 : volume}
-            aria-label="Volume"
-            className="h-2 w-24 cursor-pointer appearance-none rounded-full bg-transparent"
-            style={{
-              background: `linear-gradient(to right, rgb(15 23 42) 0%, rgb(15 23 42) ${(isMuted ? 0 : volume) * 100}%, rgb(226 232 240) ${(isMuted ? 0 : volume) * 100}%, rgb(226 232 240) 100%)`,
-            }}
-            onChange={(event) => {
-              onVolumeChange(Number(event.target.value));
-            }}
-          />
+              <div className="text-muted-foreground absolute inset-x-0 top-full mt-0.5 flex items-center justify-between text-[11px] font-medium tabular-nums">
+                <span>
+                  {formatPlaybackTime(scrubPositionSec ?? currentTimeSec)}
+                </span>
+                <span>{formatPlaybackTime(durationSec)}</span>
+              </div>
+            </div>
+
+            <div className="flex h-8 shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className="text-text-strong inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                onClick={onToggleMuted}
+                disabled={!hasActiveTrack}
+                aria-label={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={isMuted ? 0 : volume}
+                aria-label="Volume"
+                className="tt-slider h-2 w-20 cursor-pointer rounded-full sm:w-24"
+                style={volumeSliderStyle}
+                onChange={(event) => {
+                  onVolumeChange(Number(event.target.value));
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
