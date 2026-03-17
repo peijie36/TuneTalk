@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { updateRoomPlayback, type RoomQueueItemDto } from "@/api/rooms";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +19,7 @@ interface RoomNowPlayingCardProps {
   isHost: boolean;
 }
 
-export default function RoomNowPlayingCard({
+function RoomNowPlayingCard({
   roomId,
   queue,
   playbackState,
@@ -28,6 +28,8 @@ export default function RoomNowPlayingCard({
   const {
     audioRef,
     activeQueueItem,
+    applyPlaybackPatch,
+    commitAudioPreferences,
     currentTimeSec,
     durationSec,
     isAudioPaused,
@@ -84,6 +86,14 @@ export default function RoomNowPlayingCard({
     const first = queue[0];
     if (!first) return;
 
+    applyPlaybackPatch({
+      queueItemId: first.id,
+      provider: first.provider,
+      providerTrackId: first.providerTrackId,
+      positionSec: 0,
+      isPaused: false,
+    });
+
     void updateRoomPlayback(roomId, {
       queueItemId: first.id,
       provider: first.provider,
@@ -91,10 +101,18 @@ export default function RoomNowPlayingCard({
       positionSec: 0,
       isPaused: false,
     });
-  }, [queue, roomId]);
+  }, [applyPlaybackPatch, queue, roomId]);
 
   const handleSkipToNext = useCallback(() => {
     if (!nextQueueItem) return;
+
+    applyPlaybackPatch({
+      queueItemId: nextQueueItem.id,
+      provider: nextQueueItem.provider,
+      providerTrackId: nextQueueItem.providerTrackId,
+      positionSec: 0,
+      isPaused: false,
+    });
 
     void updateRoomPlayback(roomId, {
       queueItemId: nextQueueItem.id,
@@ -103,7 +121,7 @@ export default function RoomNowPlayingCard({
       positionSec: 0,
       isPaused: false,
     });
-  }, [nextQueueItem, roomId]);
+  }, [applyPlaybackPatch, nextQueueItem, roomId]);
 
   useEffect(() => {
     setScrubPositionSec(null);
@@ -137,6 +155,7 @@ export default function RoomNowPlayingCard({
             onToggleMuted={toggleMuted}
             onTogglePlayPause={togglePlayPause}
             onVolumeChange={setAudioVolume}
+            onVolumeCommit={commitAudioPreferences}
           />
 
           <RoomPlayerActions
@@ -158,3 +177,5 @@ export default function RoomNowPlayingCard({
     </Card>
   );
 }
+
+export default memo(RoomNowPlayingCard);

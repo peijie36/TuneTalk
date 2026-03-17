@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 interface RoomNowPlayingSummaryProps {
   artworkUrl: string | null;
@@ -9,7 +9,7 @@ interface RoomNowPlayingSummaryProps {
   isPaused: boolean;
 }
 
-export default function RoomNowPlayingSummary({
+function RoomNowPlayingSummary({
   artworkUrl,
   title,
   artist,
@@ -54,3 +54,5 @@ export default function RoomNowPlayingSummary({
     </div>
   );
 }
+
+export default memo(RoomNowPlayingSummary);

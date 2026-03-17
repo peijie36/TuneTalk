@@ -4,6 +4,7 @@ import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
 export const DRIFT_THRESHOLD_SEC = 2;
 export const PLAYBACK_PROGRESS_SYNC_INTERVAL_MS = 30_000;
 export const PLAYBACK_PROGRESS_SYNC_THRESHOLD_SEC = 30;
+export const PLAYBACK_UI_UPDATE_THRESHOLD_SEC = 0.1;
 
 export function getAuthoritativePositionSec(
   playback: RoomPlaybackState | null

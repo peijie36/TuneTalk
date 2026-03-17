@@ -1,20 +1,18 @@
 "use client";
 
+import { memo } from "react";
+
 import { Input } from "@/components/ui/input";
 import { useRoomMusicSearch } from "@/hooks/use-room-music-search";
 
 interface RoomMusicSearchProps {
   roomId: string;
-  musicQuery: string;
-  onMusicQueryChange: (value: string) => void;
 }
 
-export default function RoomMusicSearch({
-  roomId,
-  musicQuery,
-  onMusicQueryChange,
-}: RoomMusicSearchProps) {
+function RoomMusicSearch({ roomId }: RoomMusicSearchProps) {
   const {
+    musicQuery,
+    setMusicQuery,
     results,
     searchError,
     isSearching,
@@ -23,8 +21,6 @@ export default function RoomMusicSearch({
     selectTrack,
   } = useRoomMusicSearch({
     roomId,
-    musicQuery,
-    onMusicQueryChange,
   });
 
   return (
@@ -35,7 +31,7 @@ export default function RoomMusicSearch({
       <Input
         id="music-search"
         value={musicQuery}
-        onChange={(event) => onMusicQueryChange(event.target.value)}
+        onChange={(event) => setMusicQuery(event.target.value)}
         placeholder="Search music..."
         className="h-12 rounded-full bg-white/75 px-5 shadow-sm backdrop-blur"
       />
@@ -102,3 +98,5 @@ export default function RoomMusicSearch({
     </div>
   );
 }
+
+export default memo(RoomMusicSearch);

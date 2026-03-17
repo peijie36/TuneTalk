@@ -4,15 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { searchAudiusTracks, type AudiusTrack } from "@/api/audius";
 import { addTrackToRoomQueue } from "@/api/rooms";
 
-export function useRoomMusicSearch({
-  roomId,
-  musicQuery,
-  onMusicQueryChange,
-}: {
-  roomId: string;
-  musicQuery: string;
-  onMusicQueryChange: (value: string) => void;
-}) {
+export function useRoomMusicSearch({ roomId }: { roomId: string }) {
+  const [musicQuery, setMusicQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -41,7 +34,7 @@ export function useRoomMusicSearch({
         durationSec: track.durationSec,
       }),
     onSuccess: () => {
-      onMusicQueryChange("");
+      setMusicQuery("");
     },
   });
 
@@ -60,6 +53,8 @@ export function useRoomMusicSearch({
       searchResults.error instanceof Error);
 
   return {
+    musicQuery,
+    setMusicQuery,
     results: searchResults.data ?? [],
     searchError:
       searchResults.error instanceof Error ? searchResults.error : null,

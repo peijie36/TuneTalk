@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import type { RoomQueueItemDto } from "@/api/rooms";
 
 interface RoomQueuePanelProps {
@@ -7,10 +9,7 @@ interface RoomQueuePanelProps {
   queue: RoomQueueItemDto[];
 }
 
-export default function RoomQueuePanel({
-  activeQueueItemId,
-  queue,
-}: RoomQueuePanelProps) {
+function RoomQueuePanel({ activeQueueItemId, queue }: RoomQueuePanelProps) {
   return (
     <div className="border-border/70 rounded-[22px] border bg-white/80 p-2.5 shadow-inner">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -69,3 +68,5 @@ export default function RoomQueuePanel({
     </div>
   );
 }
+
+export default memo(RoomQueuePanel);

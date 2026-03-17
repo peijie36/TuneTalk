@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { audiusStreamUrl } from "@/api/audius";
 import { updateRoomPlayback, type RoomQueueItemDto } from "@/api/rooms";
@@ -9,9 +16,9 @@ import {
   clampPosition,
   DRIFT_THRESHOLD_SEC,
   getAuthoritativePositionSec,
-  persistAudioPreferences,
   PLAYBACK_PROGRESS_SYNC_INTERVAL_MS,
   PLAYBACK_PROGRESS_SYNC_THRESHOLD_SEC,
+  PLAYBACK_UI_UPDATE_THRESHOLD_SEC,
 } from "@/hooks/room-audio/utils";
 import { useAudioSettingsStore } from "@/stores/audio-settings";
 import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
@@ -30,23 +37,72 @@ export function useRoomAudio({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const applyingRemoteRef = useRef(false);
   const lastProgressSyncRef = useRef(0);
-  const [playback, setPlayback] = useState<RoomPlaybackState | null>(null);
+  const displayedTimeRef = useRef(0);
+  const [playback, setPlayback] = useState<RoomPlaybackState | null>(
+    realtimePlayback
+  );
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
   const [isAudioPaused, setIsAudioPaused] = useState(true);
-  const volume = useAudioSettingsStore((state) => state.volume);
-  const isMuted = useAudioSettingsStore((state) => state.isMuted);
+  const storedVolume = useAudioSettingsStore((state) => state.volume);
+  const storedMuted = useAudioSettingsStore((state) => state.isMuted);
+  const syncStoredAudioSettings = useAudioSettingsStore(
+    (state) => state.syncFromAudio
+  );
+  const [volume, setVolume] = useState(storedVolume);
+  const [isMuted, setIsMuted] = useState(storedMuted);
 
-  const activePlayback = realtimePlayback ?? playback;
+  const activePlayback = playback ?? realtimePlayback;
 
   const activeQueueItem = useMemo(
     () => queue.find((item) => item.id === activePlayback?.queueItemId) ?? null,
     [activePlayback?.queueItemId, queue]
   );
 
-  const persistVolumeState = useCallback((audio: HTMLAudioElement) => {
-    persistAudioPreferences(audio);
-  }, []);
+  const applyPlaybackPatch = useCallback(
+    (patch: Partial<RoomPlaybackState>) => {
+      setPlayback((current) => {
+        const base = current ?? realtimePlayback;
+        if (!base && !patch.queueItemId && !patch.providerTrackId) return null;
+
+        return {
+          roomId,
+          queueItemId: patch.queueItemId ?? base?.queueItemId ?? null,
+          provider: patch.provider ?? base?.provider ?? null,
+          providerTrackId:
+            patch.providerTrackId ?? base?.providerTrackId ?? null,
+          positionSec: patch.positionSec ?? base?.positionSec ?? 0,
+          isPaused: patch.isPaused ?? base?.isPaused ?? true,
+          updatedAt: patch.updatedAt ?? new Date().toISOString(),
+          controlledByUserId:
+            patch.controlledByUserId ?? base?.controlledByUserId ?? null,
+        };
+      });
+    },
+    [realtimePlayback, roomId]
+  );
+
+  const commitAudioPreferences = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    syncStoredAudioSettings(audio);
+  }, [syncStoredAudioSettings]);
+
+  const syncDisplayedTimeSec = useCallback(
+    (nextTimeSec: number, asTransition = false) => {
+      displayedTimeRef.current = nextTimeSec;
+      if (asTransition) {
+        startTransition(() => {
+          setCurrentTimeSec(nextTimeSec);
+        });
+        return;
+      }
+
+      setCurrentTimeSec(nextTimeSec);
+    },
+    []
+  );
 
   const syncPlaybackPosition = useCallback(
     (force = false) => {
@@ -87,8 +143,11 @@ export function useRoomAudio({
       const nextPositionSec = clampPosition(positionSec, durationSec);
       applyingRemoteRef.current = true;
       audio.currentTime = nextPositionSec;
-      setCurrentTimeSec(nextPositionSec);
+      syncDisplayedTimeSec(nextPositionSec);
       applyingRemoteRef.current = false;
+      applyPlaybackPatch({
+        positionSec: Math.floor(nextPositionSec),
+      });
 
       void updateRoomPlayback(roomId, {
         positionSec: Math.floor(nextPositionSec),
@@ -97,7 +156,14 @@ export function useRoomAudio({
         setPlayback(nextPlayback);
       });
     },
-    [activePlayback, durationSec, isHost, roomId]
+    [
+      activePlayback,
+      applyPlaybackPatch,
+      durationSec,
+      isHost,
+      roomId,
+      syncDisplayedTimeSec,
+    ]
   );
 
   const togglePlayPause = useCallback(() => {
@@ -112,49 +178,77 @@ export function useRoomAudio({
     audio.pause();
   }, []);
 
-  const setAudioVolume = useCallback(
-    (nextVolume: number) => {
-      const audio = audioRef.current;
-      if (!audio) return;
+  const setAudioVolume = useCallback((nextVolume: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-      const clampedVolume = Math.min(1, Math.max(0, nextVolume));
-      audio.volume = clampedVolume;
-      if (audio.muted && clampedVolume > 0) {
-        audio.muted = false;
-      }
-
-      persistVolumeState(audio);
-    },
-    [persistVolumeState]
-  );
+    const clampedVolume = Math.min(1, Math.max(0, nextVolume));
+    audio.volume = clampedVolume;
+    setVolume(clampedVolume);
+    if (audio.muted && clampedVolume > 0) {
+      audio.muted = false;
+      setIsMuted(false);
+    }
+  }, []);
 
   const toggleMuted = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     audio.muted = !audio.muted;
-    persistVolumeState(audio);
-  }, [persistVolumeState]);
+    setIsMuted(audio.muted);
+    syncStoredAudioSettings(audio);
+  }, [syncStoredAudioSettings]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     applyStoredAudioPreferences(audio);
+    setVolume(audio.volume);
+    setIsMuted(audio.muted);
   }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (audio.volume !== volume) {
-      audio.volume = volume;
+    if (audio.volume !== storedVolume) {
+      audio.volume = storedVolume;
     }
 
-    if (audio.muted !== isMuted) {
-      audio.muted = isMuted;
+    if (audio.muted !== storedMuted) {
+      audio.muted = storedMuted;
     }
-  }, [isMuted, volume]);
+
+    setVolume(audio.volume);
+    setIsMuted(audio.muted);
+  }, [storedMuted, storedVolume]);
+
+  useEffect(() => {
+    setPlayback((current) => {
+      if (!realtimePlayback) return current;
+      if (!current) return realtimePlayback;
+
+      const currentUpdatedAt = Date.parse(current.updatedAt);
+      const nextUpdatedAt = Date.parse(realtimePlayback.updatedAt);
+
+      if (
+        !Number.isFinite(currentUpdatedAt) ||
+        !Number.isFinite(nextUpdatedAt)
+      ) {
+        return realtimePlayback;
+      }
+
+      return nextUpdatedAt >= currentUpdatedAt ? realtimePlayback : current;
+    });
+  }, [realtimePlayback]);
+
+  useEffect(() => {
+    setPlayback(realtimePlayback ?? null);
+    lastProgressSyncRef.current = 0;
+    displayedTimeRef.current = 0;
+  }, [roomId]);
 
   useEffect(() => {
     setDurationSec(activeQueueItem?.durationSec ?? 0);
@@ -165,7 +259,15 @@ export function useRoomAudio({
     if (!audio) return;
 
     const handleTimeUpdate = () => {
-      setCurrentTimeSec(audio.currentTime);
+      const nextTime = audio.currentTime;
+      if (
+        Math.abs(displayedTimeRef.current - nextTime) <
+        PLAYBACK_UI_UPDATE_THRESHOLD_SEC
+      ) {
+        return;
+      }
+
+      syncDisplayedTimeSec(nextTime, true);
     };
 
     const handleDurationChange = () => {
@@ -179,6 +281,10 @@ export function useRoomAudio({
 
     const handlePlay = () => {
       setIsAudioPaused(false);
+      applyPlaybackPatch({
+        isPaused: false,
+        positionSec: Math.floor(audio.currentTime),
+      });
 
       if (!isHost || applyingRemoteRef.current) return;
 
@@ -193,6 +299,10 @@ export function useRoomAudio({
 
     const handlePause = () => {
       setIsAudioPaused(true);
+      applyPlaybackPatch({
+        isPaused: true,
+        positionSec: Math.floor(audio.currentTime),
+      });
 
       if (!isHost || applyingRemoteRef.current) return;
 
@@ -206,11 +316,12 @@ export function useRoomAudio({
     };
 
     const handleVolumeChange = () => {
-      persistVolumeState(audio);
+      setVolume(audio.volume);
+      setIsMuted(audio.muted);
     };
 
     const handleEnded = () => {
-      setCurrentTimeSec(0);
+      syncDisplayedTimeSec(0);
       setIsAudioPaused(true);
 
       if (!isHost || !activeQueueItem) return;
@@ -219,6 +330,14 @@ export function useRoomAudio({
         (item) => item.id === activeQueueItem.id
       );
       const next = activeIndex >= 0 ? (queue[activeIndex + 1] ?? null) : null;
+
+      applyPlaybackPatch({
+        queueItemId: next?.id ?? null,
+        provider: next?.provider ?? null,
+        providerTrackId: next?.providerTrackId ?? null,
+        positionSec: 0,
+        isPaused: next ? false : true,
+      });
 
       void updateRoomPlayback(roomId, {
         queueItemId: next?.id ?? null,
@@ -249,7 +368,14 @@ export function useRoomAudio({
       audio.removeEventListener("volumechange", handleVolumeChange);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [activeQueueItem, isHost, persistVolumeState, queue, roomId]);
+  }, [
+    activeQueueItem,
+    applyPlaybackPatch,
+    isHost,
+    queue,
+    roomId,
+    syncDisplayedTimeSec,
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -259,7 +385,7 @@ export function useRoomAudio({
       applyingRemoteRef.current = true;
       audio.pause();
       applyingRemoteRef.current = false;
-      setCurrentTimeSec(0);
+      syncDisplayedTimeSec(0);
       setIsAudioPaused(true);
 
       if (audio.getAttribute("src")) {
@@ -273,13 +399,15 @@ export function useRoomAudio({
     if (audio.src !== nextSrc) {
       audio.src = nextSrc;
       applyStoredAudioPreferences(audio);
+      setVolume(audio.volume);
+      setIsMuted(audio.muted);
     }
 
     const remoteTime = getAuthoritativePositionSec(activePlayback);
     if (Math.abs(audio.currentTime - remoteTime) > DRIFT_THRESHOLD_SEC) {
       applyingRemoteRef.current = true;
       audio.currentTime = remoteTime;
-      setCurrentTimeSec(remoteTime);
+      syncDisplayedTimeSec(remoteTime);
       applyingRemoteRef.current = false;
     }
 
@@ -298,7 +426,7 @@ export function useRoomAudio({
           applyingRemoteRef.current = false;
         });
     }
-  }, [activePlayback]);
+  }, [activePlayback, syncDisplayedTimeSec]);
 
   useEffect(() => {
     if (!isHost) return;
@@ -337,6 +465,8 @@ export function useRoomAudio({
   return {
     audioRef,
     activeQueueItem,
+    applyPlaybackPatch,
+    commitAudioPreferences,
     currentTimeSec,
     durationSec,
     isAudioPaused,

@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import { SkipForward } from "lucide-react";
 
 import type { RoomQueueItemDto } from "@/api/rooms";
@@ -15,7 +17,7 @@ interface RoomPlayerActionsProps {
   onSkipToNext: () => void;
 }
 
-export default function RoomPlayerActions({
+function RoomPlayerActions({
   queue,
   canStart,
   isHost,
@@ -58,3 +60,5 @@ export default function RoomPlayerActions({
     </div>
   );
 }
+
+export default memo(RoomPlayerActions);

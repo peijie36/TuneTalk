@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 
 import { Copy, Link2, LogOut, Users } from "lucide-react";
 
@@ -36,7 +36,7 @@ interface RoomInfoSidebarCardProps {
   isLeaving: boolean;
 }
 
-export default function RoomInfoSidebarCard({
+function RoomInfoSidebarCard({
   roomId,
   roomName,
   hostName,
@@ -216,3 +216,5 @@ export default function RoomInfoSidebarCard({
     </Card>
   );
 }
+
+export default memo(RoomInfoSidebarCard);

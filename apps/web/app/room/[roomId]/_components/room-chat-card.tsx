@@ -16,6 +16,8 @@ import type {
   SendChatResult,
 } from "@/hooks/room-realtime-types";
 import { useRoomChatListState } from "@/hooks/use-room-chat-list-state";
+import type { RoomChatUiState } from "@/hooks/use-room-chat-ui-state";
+import { useRoomChatUiStateSnapshot } from "@/hooks/use-room-chat-ui-state";
 import { useRoomMessages } from "@/hooks/use-room-messages";
 import { cn } from "@/utils/cn";
 import { formatMessageTime } from "@/utils/room-realtime-utils";
@@ -338,12 +340,10 @@ interface RoomChatCardProps {
   wsStatus: RoomWebSocketStatus;
   wsStatusDetail: string | null;
   sendChat: (text: string) => SendChatResult;
-  chatError: string | null;
-  setChatError: (value: string | null) => void;
-  liveAnnouncement: string;
+  chatUiState: RoomChatUiState;
 }
 
-export default function RoomChatCard({
+function RoomChatCard({
   roomId,
   roomReady,
   isRoomNotFound,
@@ -353,23 +353,26 @@ export default function RoomChatCard({
   wsStatus,
   wsStatusDetail,
   sendChat,
-  chatError,
-  setChatError,
-  liveAnnouncement,
+  chatUiState,
 }: RoomChatCardProps) {
   const router = useRouter();
   const messagesQuery = useRoomMessages(roomId, roomReady);
+  const { chatError, liveAnnouncement } =
+    useRoomChatUiStateSnapshot(chatUiState);
   const canSendChat = !!sessionUserId && wsStatus === "connected" && roomReady;
 
   useEffect(() => {
     if (!chatError) return;
-    const timeout = window.setTimeout(() => setChatError(null), 4500);
+    const timeout = window.setTimeout(
+      () => chatUiState.setChatError(null),
+      4500
+    );
     return () => window.clearTimeout(timeout);
-  }, [chatError, setChatError]);
+  }, [chatError, chatUiState]);
 
   useEffect(() => {
-    if (wsStatus === "connected") setChatError(null);
-  }, [setChatError, wsStatus]);
+    if (wsStatus === "connected") chatUiState.setChatError(null);
+  }, [chatUiState, wsStatus]);
 
   if (isRoomNotFound) {
     return (
@@ -446,7 +449,7 @@ export default function RoomChatCard({
         wsStatus={wsStatus}
         canSendChat={canSendChat}
         sendChat={sendChat}
-        onChatError={setChatError}
+        onChatError={chatUiState.setChatError}
       />
 
       {wsStatusDetail && wsStatus !== "connected" ? (
@@ -455,3 +458,7 @@ export default function RoomChatCard({
     </ChatShell>
   );
 }
+
+const MemoizedRoomChatCard = memo(RoomChatCard);
+
+export default MemoizedRoomChatCard;

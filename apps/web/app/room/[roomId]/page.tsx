@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { useRoomPageState } from "@/hooks/use-room-page-state";
 import RoomChatCard from "./_components/room-chat-card";
 import RoomInfoSidebarCard from "./_components/room-info-sidebar-card";
@@ -9,18 +7,13 @@ import RoomNowPlayingCard from "./_components/room-now-playing-card";
 import RoomPageHeader from "./_components/room-page-header";
 
 export default function RoomPage() {
-  const [musicQuery, setMusicQuery] = useState("");
   const roomPage = useRoomPageState();
 
   return (
     <div className="bg-background relative min-h-screen">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-linear-to-b from-transparent via-white/20 to-white/60" />
 
-      <RoomPageHeader
-        roomId={roomPage.roomId}
-        musicQuery={musicQuery}
-        onMusicQueryChange={setMusicQuery}
-      />
+      <RoomPageHeader roomId={roomPage.roomId} />
 
       <main className="tt-container pb-10 lg:pb-6">
         <section
@@ -66,9 +59,7 @@ export default function RoomPage() {
                   wsStatus={roomPage.wsStatus}
                   wsStatusDetail={roomPage.wsStatusDetail}
                   sendChat={roomPage.sendChat}
-                  chatError={roomPage.chatError}
-                  setChatError={roomPage.setChatError}
-                  liveAnnouncement={roomPage.liveAnnouncement}
+                  chatUiState={roomPage.chatUiState}
                 />
               </div>
             </div>

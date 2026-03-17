@@ -2,10 +2,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ApiError, leaveRoom } from "@/api/rooms";
 import { useFetchRoom } from "@/hooks/use-fetch-room";
+import { useRoomChatUiState } from "@/hooks/use-room-chat-ui-state";
 import { useRoomQueueState } from "@/hooks/use-room-queue-state";
 import { useRoomRealtime } from "@/hooks/use-room-realtime";
 import { authClient } from "@/lib/auth-client";
@@ -33,10 +34,9 @@ export function useRoomPageState() {
   const clearHostedRoom = useHostRoomResumeStore(
     (state) => state.clearHostedRoom
   );
+  const chatUiState = useRoomChatUiState();
 
   const leavingIntentRef = useRef(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [liveAnnouncement, setLiveAnnouncement] = useState("");
 
   const roomQuery = useFetchRoom(roomId);
   const room = roomQuery.data ?? null;
@@ -100,8 +100,8 @@ export function useRoomPageState() {
     roomId,
     enabled: realtimeEnabled,
     sessionUserId,
-    onChatError: setChatError,
-    onAnnouncement: setLiveAnnouncement,
+    onChatError: chatUiState.setChatError,
+    onAnnouncement: chatUiState.setLiveAnnouncement,
     onAccessRequired: handleRealtimeAccessRequired,
     onRoomDisbanded: clearHostedRoom,
   });
@@ -173,8 +173,6 @@ export function useRoomPageState() {
     isLeaving,
     realtimeEnabled,
     sendChat,
-    chatError,
-    setChatError,
-    liveAnnouncement,
+    chatUiState,
   };
 }
