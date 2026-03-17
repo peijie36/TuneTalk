@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TuneTalk • Shared listening rooms",
+  title: "TuneTalk | Shared Listening Rooms",
   description:
-    "Create synced listening rooms with Better Auth, realtime chat, and a Hono playback control plane.",
+    "Create and join shared listening rooms with synced playback and live chat.",
 };
 
 export default function RootLayout({
