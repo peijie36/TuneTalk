@@ -54,7 +54,7 @@ export function useFetchRoomList({
   const loadMore = useCallback(() => {
     if (!query.hasNextPage || query.isFetchingNextPage) return;
     void query.fetchNextPage();
-  }, [query]);
+  }, [query.fetchNextPage, query.hasNextPage, query.isFetchingNextPage]);
 
   const rooms = useMemo(() => {
     const ordered: RoomSummary[] = [];

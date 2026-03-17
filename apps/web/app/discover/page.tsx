@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  memo,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -10,8 +11,10 @@ import {
   useState,
 } from "react";
 
-import { RefreshCcw, Search } from "lucide-react";
+import { RefreshCcw, Search, X } from "lucide-react";
 import { toast } from "sonner";
+
+import type { RoomSummary } from "@tunetalk/shared/rooms";
 
 import { ApiError, getRoom } from "@/api/rooms";
 import AuthButtons from "@/components/auth/auth-buttons";
@@ -40,6 +43,230 @@ const FILTER_OPTIONS: readonly { value: RoomFilter; label: string }[] = [
   { value: "public", label: "Public" },
   { value: "private", label: "Private" },
 ];
+
+const DiscoverResumeBanner = memo(function DiscoverResumeBanner({
+  resumeHostedRoom,
+  onResumeHostedRoom,
+}: {
+  resumeHostedRoom: { id: string; name: string } | null;
+  onResumeHostedRoom: () => void;
+}) {
+  if (!resumeHostedRoom) return null;
+
+  return (
+    <div className="border-border/70 flex flex-col gap-3 rounded-3xl border bg-white/75 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-text-strong text-sm font-semibold">
+          Resume hosting room
+        </p>
+        <p className="text-muted-foreground truncate text-sm">
+          {resumeHostedRoom.name}
+        </p>
+      </div>
+      <Button type="button" className="h-11 px-6" onClick={onResumeHostedRoom}>
+        Resume
+      </Button>
+    </div>
+  );
+});
+
+const DiscoverFilterBar = memo(function DiscoverFilterBar({
+  filter,
+  query,
+  onFilterChange,
+}: {
+  filter: RoomFilter;
+  query: string;
+  onFilterChange: (value: RoomFilter) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTER_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              type="button"
+              size="sm"
+              variant={filter === option.value ? "default" : "secondary"}
+              className={cn(
+                "h-10 px-5",
+                filter === option.value ? "" : "bg-white/55 backdrop-blur"
+              )}
+              aria-pressed={filter === option.value}
+              onClick={() => onFilterChange(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="text-muted-foreground text-sm" aria-live="polite">
+        {query ? (
+          <>
+            Results for{" "}
+            <span className="text-text-strong font-semibold">
+              {"\u201C"}
+              {query}
+              {"\u201D"}
+            </span>
+          </>
+        ) : null}
+      </div>
+    </>
+  );
+});
+
+const DiscoverRoomList = memo(function DiscoverRoomList({
+  rooms,
+  selectedRoomId,
+  onSelectRoom,
+  onJoinRoom,
+  onReset,
+}: {
+  rooms: RoomSummary[];
+  selectedRoomId: string;
+  onSelectRoom: (roomId: string) => void;
+  onJoinRoom: (roomId: string) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {rooms.length === 0 ? (
+        <div className="border-border/70 rounded-[26px] border bg-white/70 backdrop-blur">
+          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+            <p className="text-text-strong text-base font-semibold">
+              No rooms match your search
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Try a different query or reset filters.
+            </p>
+            <Button type="button" variant="secondary" onClick={onReset}>
+              Reset
+            </Button>
+          </div>
+        </div>
+      ) : (
+        rooms.map((room) => (
+          <RoomRow
+            key={room.id}
+            room={room}
+            isSelected={room.id === selectedRoomId}
+            onSelect={onSelectRoom}
+            onJoin={onJoinRoom}
+          />
+        ))
+      )}
+    </div>
+  );
+});
+
+const DiscoverPagination = memo(function DiscoverPagination({
+  pageIndex,
+  pageCount,
+  pageCountLabel,
+  hasMoreRooms,
+  isRoomsFetchingMore,
+  onPrevPage,
+  onNextPage,
+}: {
+  pageIndex: number;
+  pageCount: number;
+  pageCountLabel: string;
+  hasMoreRooms: boolean;
+  isRoomsFetchingMore: boolean;
+  onPrevPage: () => void;
+  onNextPage: () => void;
+}) {
+  if (!(pageCount > 1 || hasMoreRooms)) return null;
+
+  return (
+    <nav
+      aria-label="Room pages"
+      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="text-muted-foreground text-sm">
+        Page{" "}
+        <span className="text-text-strong font-semibold">{pageIndex + 1}</span>{" "}
+        of{" "}
+        <span className="text-text-strong font-semibold">{pageCountLabel}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onPrevPage}
+          disabled={pageIndex === 0}
+          className="h-10 px-5"
+        >
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onNextPage}
+          disabled={
+            (!hasMoreRooms && pageIndex >= pageCount - 1) || isRoomsFetchingMore
+          }
+          className="h-10 px-5"
+        >
+          {isRoomsFetchingMore ? "Loading..." : "Next"}
+        </Button>
+      </div>
+    </nav>
+  );
+});
+
+const DiscoverActionBar = memo(function DiscoverActionBar({
+  isSessionPending,
+  canJoinSelected,
+  isRoomsFetching,
+  onCreate,
+  onJoinSelected,
+  onRefresh,
+}: {
+  isSessionPending: boolean;
+  canJoinSelected: boolean;
+  isRoomsFetching: boolean;
+  onCreate: () => void;
+  onJoinSelected: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="border-border/60 border-t pt-6">
+      <div className="flex flex-wrap items-center justify-center gap-4">
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-12 px-8"
+          onClick={onCreate}
+          disabled={isSessionPending}
+        >
+          Create
+        </Button>
+        <Button
+          type="button"
+          className="h-12 px-10"
+          disabled={!canJoinSelected}
+          onClick={onJoinSelected}
+        >
+          Join
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-12 px-8"
+          onClick={onRefresh}
+          disabled={isRoomsFetching}
+        >
+          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+          Refresh
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 export default function DiscoverPage() {
   const router = useRouter();
@@ -169,10 +396,12 @@ export default function DiscoverPage() {
     session?.user?.id,
   ]);
 
-  const selectedRoom = useMemo(
-    () => rooms.find((room) => room.id === selectedRoomId) ?? null,
-    [rooms, selectedRoomId]
+  const roomLookup = useMemo(
+    () => new Map<string, RoomSummary>(rooms.map((room) => [room.id, room])),
+    [rooms]
   );
+
+  const selectedRoom = roomLookup.get(selectedRoomId) ?? null;
 
   const canJoinSelected =
     !!selectedRoom &&
@@ -238,10 +467,10 @@ export default function DiscoverPage() {
     return rooms.slice(start, start + ROOMS_PER_PAGE);
   }, [rooms, pageIndex]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setQuery("");
     setFilter("all");
-  };
+  }, []);
 
   const handleSelectRoom = useCallback((roomId: string) => {
     setSelectedRoomId(roomId);
@@ -263,8 +492,7 @@ export default function DiscoverPage() {
         const result = await joinRoom.attemptJoin(roomId);
         if (!result.ok) {
           if (result.requiresPassword) {
-            const name =
-              rooms.find((room) => room.id === roomId)?.name ?? "Room";
+            const name = roomLookup.get(roomId)?.name ?? "Room";
             setJoinModalRoomId(roomId);
             setJoinModalRoomName(name);
             setJoinPassword("");
@@ -279,7 +507,7 @@ export default function DiscoverPage() {
         router.push(`/room/${roomId}`);
       })();
     },
-    [isSessionPending, joinRoom, rooms, router, session]
+    [isSessionPending, joinRoom, roomLookup, router, session]
   );
 
   const handleJoinWithPassword = useCallback(() => {
@@ -316,12 +544,12 @@ export default function DiscoverPage() {
     session,
   ]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setPageIndex(0);
     refreshRooms();
-  };
+  }, [refreshRooms]);
 
-  const handleCreateClick = () => {
+  const handleCreateClick = useCallback(() => {
     if (isSessionPending) return;
     if (!session) {
       router.push(`/signin?callbackURL=${encodeURIComponent("/discover")}`);
@@ -329,34 +557,34 @@ export default function DiscoverPage() {
     }
 
     createRoom.openModal();
-  };
+  }, [createRoom, isSessionPending, router, session]);
 
-  const handleCreateSubmit = async () => {
+  const handleCreateSubmit = useCallback(async () => {
     if (!session || isSessionPending) return;
     const result = await createRoom.submit();
     if (result.ok) router.push(`/room/${result.id}`);
-  };
+  }, [createRoom, isSessionPending, router, session]);
 
-  const handleJoinSelected = () => {
+  const handleJoinSelected = useCallback(() => {
     if (!selectedRoom) return;
     handleJoinRoom(selectedRoom.id);
-  };
+  }, [handleJoinRoom, selectedRoom]);
 
   const handleResumeHostedRoom = useCallback(() => {
     if (!resumeHostedRoom) return;
     router.push(`/room/${resumeHostedRoom.id}`);
   }, [resumeHostedRoom, router]);
 
-  const handlePrevPage = () => {
+  const handlePrevPage = useCallback(() => {
     setPageIndex((current) => Math.max(0, current - 1));
-  };
+  }, []);
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     setPageIndex((current) => {
       if (!hasMoreRooms && current >= pageCount - 1) return current;
       return current + 1;
     });
-  };
+  }, [hasMoreRooms, pageCount]);
 
   const pageCountLabel = hasMoreRooms
     ? `${Math.max(pageCount, pageIndex + 1)}+`
@@ -381,8 +609,21 @@ export default function DiscoverPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search rooms, hosts, or tracks..."
-              className="h-12 rounded-full bg-white/75 pr-4 pl-11 shadow-sm backdrop-blur"
+              className="h-12 rounded-full bg-white/75 pr-12 pl-11 shadow-sm backdrop-blur"
             />
+            <button
+              type="button"
+              aria-label="Clear room search"
+              className="text-muted-foreground hover:text-text-strong absolute top-1/2 right-4 inline-flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full transition-colors"
+              onClick={() => setQuery("")}
+            >
+              <X
+                className={`h-4 w-4 transition-opacity ${
+                  query ? "opacity-100" : "opacity-45"
+                }`}
+                aria-hidden="true"
+              />
+            </button>
           </div>
         </div>
 
@@ -409,170 +650,45 @@ export default function DiscoverPage() {
             </div>
 
             <div className="space-y-5 lg:col-start-2 lg:row-start-1">
-              {resumeHostedRoom ? (
-                <div className="border-border/70 flex flex-col gap-3 rounded-3xl border bg-white/75 p-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-text-strong text-sm font-semibold">
-                      Resume hosting room
-                    </p>
-                    <p className="text-muted-foreground truncate text-sm">
-                      {resumeHostedRoom.name}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    className="h-11 px-6"
-                    onClick={handleResumeHostedRoom}
-                  >
-                    Resume
-                  </Button>
-                </div>
-              ) : null}
+              <DiscoverResumeBanner
+                resumeHostedRoom={resumeHostedRoom}
+                onResumeHostedRoom={handleResumeHostedRoom}
+              />
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  {FILTER_OPTIONS.map((option) => (
-                    <Button
-                      key={option.value}
-                      type="button"
-                      size="sm"
-                      variant={
-                        filter === option.value ? "default" : "secondary"
-                      }
-                      className={cn(
-                        "h-10 px-5",
-                        filter === option.value
-                          ? ""
-                          : "bg-white/55 backdrop-blur"
-                      )}
-                      aria-pressed={filter === option.value}
-                      onClick={() => setFilter(option.value)}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="text-muted-foreground text-sm" aria-live="polite">
-                {query ? (
-                  <>
-                    Results for{" "}
-                    <span className="text-text-strong font-semibold">
-                      {"\u201C"}
-                      {query}
-                      {"\u201D"}
-                    </span>
-                  </>
-                ) : null}
-              </div>
+              <DiscoverFilterBar
+                filter={filter}
+                query={query}
+                onFilterChange={setFilter}
+              />
             </div>
 
             <div className="space-y-5 lg:col-start-2 lg:row-start-2">
-              <div className="space-y-4">
-                {rooms.length === 0 ? (
-                  <div className="border-border/70 rounded-[26px] border bg-white/70 backdrop-blur">
-                    <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-                      <p className="text-text-strong text-base font-semibold">
-                        No rooms match your search
-                      </p>
-                      <p className="text-muted-foreground text-sm">
-                        Try a different query or reset filters.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={handleReset}
-                      >
-                        Reset
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  pagedRooms.map((room) => (
-                    <RoomRow
-                      key={room.id}
-                      room={room}
-                      isSelected={room.id === selectedRoomId}
-                      onSelect={handleSelectRoom}
-                      onJoin={handleJoinRoom}
-                    />
-                  ))
-                )}
-              </div>
+              <DiscoverRoomList
+                rooms={pagedRooms}
+                selectedRoomId={selectedRoomId}
+                onSelectRoom={handleSelectRoom}
+                onJoinRoom={handleJoinRoom}
+                onReset={handleReset}
+              />
 
-              {pageCount > 1 || hasMoreRooms ? (
-                <nav
-                  aria-label="Room pages"
-                  className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="text-muted-foreground text-sm">
-                    Page{" "}
-                    <span className="text-text-strong font-semibold">
-                      {pageIndex + 1}
-                    </span>{" "}
-                    of{" "}
-                    <span className="text-text-strong font-semibold">
-                      {pageCountLabel}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handlePrevPage}
-                      disabled={pageIndex === 0}
-                      className="h-10 px-5"
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleNextPage}
-                      disabled={
-                        (!hasMoreRooms && pageIndex >= pageCount - 1) ||
-                        isRoomsFetchingMore
-                      }
-                      className="h-10 px-5"
-                    >
-                      {isRoomsFetchingMore ? "Loading..." : "Next"}
-                    </Button>
-                  </div>
-                </nav>
-              ) : null}
+              <DiscoverPagination
+                pageIndex={pageIndex}
+                pageCount={pageCount}
+                pageCountLabel={pageCountLabel}
+                hasMoreRooms={hasMoreRooms}
+                isRoomsFetchingMore={isRoomsFetchingMore}
+                onPrevPage={handlePrevPage}
+                onNextPage={handleNextPage}
+              />
 
-              <div className="border-border/60 border-t pt-6">
-                <div className="flex flex-wrap items-center justify-center gap-4">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-12 px-8"
-                    onClick={handleCreateClick}
-                    disabled={isSessionPending}
-                  >
-                    Create
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-12 px-10"
-                    disabled={!canJoinSelected}
-                    onClick={handleJoinSelected}
-                  >
-                    Join
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-12 px-8"
-                    onClick={handleRefresh}
-                    disabled={isRoomsFetching}
-                  >
-                    <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-                    Refresh
-                  </Button>
-                </div>
-              </div>
+              <DiscoverActionBar
+                isSessionPending={isSessionPending}
+                canJoinSelected={canJoinSelected}
+                isRoomsFetching={isRoomsFetching}
+                onCreate={handleCreateClick}
+                onJoinSelected={handleJoinSelected}
+                onRefresh={handleRefresh}
+              />
             </div>
           </div>
         </section>
