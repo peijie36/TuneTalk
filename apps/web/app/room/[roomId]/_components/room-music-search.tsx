@@ -38,16 +38,19 @@ function RoomMusicSearch({ roomId }: RoomMusicSearchProps) {
         placeholder="Search music..."
         className="h-12 rounded-full bg-white/75 px-5 pr-12 shadow-sm backdrop-blur"
       />
-      {musicQuery ? (
-        <button
-          type="button"
-          aria-label="Clear search"
-          className="text-muted-foreground hover:text-text-strong absolute top-1/2 right-4 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full transition-colors"
-          onClick={clearSearch}
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
-      ) : null}
+      <button
+        type="button"
+        aria-label="Clear search"
+        className="text-muted-foreground hover:text-text-strong absolute top-1/2 right-4 inline-flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full transition-colors"
+        onClick={clearSearch}
+      >
+        <X
+          className={`h-4 w-4 transition-opacity ${
+            musicQuery ? "opacity-100" : "opacity-45"
+          }`}
+          aria-hidden="true"
+        />
+      </button>
 
       {showResults ? (
         <div className="absolute top-[calc(100%+0.6rem)] left-0 z-30 w-full overflow-hidden rounded-3xl border border-black/10 bg-white/95 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur">
