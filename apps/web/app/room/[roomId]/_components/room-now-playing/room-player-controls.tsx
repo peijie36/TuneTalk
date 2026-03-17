@@ -55,7 +55,7 @@ export default function RoomPlayerControls({
   } as CSSProperties;
 
   return (
-    <div className="border-border/70 rounded-[22px] border bg-white/85 px-3 pt-2.5 pb-5 shadow-inner">
+    <div className="border-border/70 rounded-[22px] border bg-white/85 px-3 pt-2.5 pb-4 shadow-inner">
       <div className="flex items-center gap-3">
         <Button
           type="button"
