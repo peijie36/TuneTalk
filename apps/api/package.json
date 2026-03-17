@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
-    "build": "tsc --noEmit -p tsconfig.json && tsup",
-    "start": "node dist/index.js",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/index.ts",
     "lint": "eslint .",
     "open-auth-docs": "open-cli http://localhost:8787/api/auth/reference"
   },
