@@ -6,6 +6,13 @@ import type { RoomQueueItem } from "@tunetalk/shared/rooms";
 
 import type { RoomQueueItemDto } from "@/api/rooms";
 
+function sortQueueItems(queue: RoomQueueItemDto[]) {
+  return [...queue].sort((a, b) => {
+    if (a.position !== b.position) return a.position - b.position;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+}
+
 export function useRoomQueueState({
   roomId,
   roomReady,
@@ -27,7 +34,7 @@ export function useRoomQueueState({
 
   useEffect(() => {
     if (!queueState) return;
-    setQueue(queueState);
+    setQueue(sortQueueItems(queueState));
   }, [queueState]);
 
   useEffect(() => {
@@ -37,21 +44,23 @@ export function useRoomQueueState({
     prevPlaybackQueueItemIdRef.current = playbackQueueItemId;
 
     setQueue((current) => {
+      const ordered = sortQueueItems(current);
+
       if (playbackQueueItemId) {
-        const currentIndex = current.findIndex(
+        const currentIndex = ordered.findIndex(
           (item) => item.id === playbackQueueItemId
         );
-        return currentIndex > 0 ? current.slice(currentIndex) : current;
+        return currentIndex > 0 ? ordered.slice(currentIndex) : ordered;
       }
 
       if (previousQueueItemId) {
-        const previousIndex = current.findIndex(
+        const previousIndex = ordered.findIndex(
           (item) => item.id === previousQueueItemId
         );
-        return previousIndex >= 0 ? current.slice(previousIndex + 1) : current;
+        return previousIndex >= 0 ? ordered.slice(previousIndex + 1) : ordered;
       }
 
-      return current;
+      return ordered;
     });
   }, [playbackQueueItemId, roomReady]);
 

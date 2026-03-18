@@ -7,15 +7,18 @@ export const PLAYBACK_PROGRESS_SYNC_THRESHOLD_SEC = 30;
 export const PLAYBACK_UI_UPDATE_THRESHOLD_SEC = 0.1;
 
 export function getAuthoritativePositionSec(
-  playback: RoomPlaybackState | null
+  playback: RoomPlaybackState | null,
+  syncedAtMs: number | null
 ) {
   if (!playback) return 0;
   if (playback.isPaused) return playback.positionSec;
 
-  const updatedAtMs = Date.parse(playback.updatedAt);
-  if (!Number.isFinite(updatedAtMs)) return playback.positionSec;
+  const referenceMs = typeof syncedAtMs === "number" ? syncedAtMs : Number.NaN;
+  if (!Number.isFinite(referenceMs)) {
+    return playback.positionSec;
+  }
 
-  const elapsedSec = Math.max(0, (Date.now() - updatedAtMs) / 1000);
+  const elapsedSec = Math.max(0, (Date.now() - referenceMs) / 1000);
   return playback.positionSec + elapsedSec;
 }
 

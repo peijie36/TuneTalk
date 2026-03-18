@@ -10,6 +10,11 @@ interface RoomQueuePanelProps {
 }
 
 function RoomQueuePanel({ activeQueueItemId, queue }: RoomQueuePanelProps) {
+  const orderedQueue = [...queue].sort((a, b) => {
+    if (a.position !== b.position) return a.position - b.position;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+
   return (
     <div className="border-border/70 rounded-[22px] border bg-white/80 p-2.5 shadow-inner">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -20,7 +25,7 @@ function RoomQueuePanel({ activeQueueItemId, queue }: RoomQueuePanelProps) {
       </div>
 
       <div className="max-h-28 space-y-1 overflow-y-auto pr-1">
-        {queue.map((item, index) => {
+        {orderedQueue.map((item) => {
           const isActive = item.id === activeQueueItemId;
           return (
             <div
@@ -39,7 +44,7 @@ function RoomQueuePanel({ activeQueueItemId, queue }: RoomQueuePanelProps) {
                       : "text-muted-foreground"
                   }`}
                 >
-                  {index + 1}
+                  {item.position + 1}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] leading-tight font-medium">

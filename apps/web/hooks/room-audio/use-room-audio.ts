@@ -23,6 +23,25 @@ import {
 import { useAudioSettingsStore } from "@/stores/audio-settings";
 import type { RoomPlaybackState } from "@tunetalk/shared/rooms";
 
+const OPTIMISTIC_UPDATED_AT = new Date(0).toISOString();
+
+interface PlaybackSnapshot {
+  state: RoomPlaybackState;
+  syncedAtMs: number;
+  source: "authoritative" | "local";
+}
+
+function toPlaybackSnapshot(
+  state: RoomPlaybackState,
+  source: PlaybackSnapshot["source"] = "authoritative"
+): PlaybackSnapshot {
+  return {
+    state,
+    syncedAtMs: Date.now(),
+    source,
+  };
+}
+
 export function useRoomAudio({
   roomId,
   queue,
@@ -38,8 +57,8 @@ export function useRoomAudio({
   const applyingRemoteRef = useRef(false);
   const lastProgressSyncRef = useRef(0);
   const displayedTimeRef = useRef(0);
-  const [playback, setPlayback] = useState<RoomPlaybackState | null>(
-    realtimePlayback
+  const [playback, setPlayback] = useState<PlaybackSnapshot | null>(() =>
+    realtimePlayback ? toPlaybackSnapshot(realtimePlayback) : null
   );
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
@@ -52,7 +71,15 @@ export function useRoomAudio({
   const [volume, setVolume] = useState(storedVolume);
   const [isMuted, setIsMuted] = useState(storedMuted);
 
-  const activePlayback = playback ?? realtimePlayback;
+  const activePlayback = playback?.state ?? null;
+  const activePlaybackSyncedAtMs = playback?.syncedAtMs ?? null;
+
+  const syncAuthoritativePlayback = useCallback(
+    (nextPlayback: RoomPlaybackState) => {
+      setPlayback(toPlaybackSnapshot(nextPlayback));
+    },
+    []
+  );
 
   const activeQueueItem = useMemo(
     () => queue.find((item) => item.id === activePlayback?.queueItemId) ?? null,
@@ -62,21 +89,26 @@ export function useRoomAudio({
   const applyPlaybackPatch = useCallback(
     (patch: Partial<RoomPlaybackState>) => {
       setPlayback((current) => {
-        const base = current ?? realtimePlayback;
+        const base = current?.state ?? realtimePlayback;
         if (!base && !patch.queueItemId && !patch.providerTrackId) return null;
 
-        return {
-          roomId,
-          queueItemId: patch.queueItemId ?? base?.queueItemId ?? null,
-          provider: patch.provider ?? base?.provider ?? null,
-          providerTrackId:
-            patch.providerTrackId ?? base?.providerTrackId ?? null,
-          positionSec: patch.positionSec ?? base?.positionSec ?? 0,
-          isPaused: patch.isPaused ?? base?.isPaused ?? true,
-          updatedAt: patch.updatedAt ?? new Date().toISOString(),
-          controlledByUserId:
-            patch.controlledByUserId ?? base?.controlledByUserId ?? null,
-        };
+        return toPlaybackSnapshot(
+          {
+            roomId,
+            queueItemId: patch.queueItemId ?? base?.queueItemId ?? null,
+            provider: patch.provider ?? base?.provider ?? null,
+            providerTrackId:
+              patch.providerTrackId ?? base?.providerTrackId ?? null,
+            positionSec: patch.positionSec ?? base?.positionSec ?? 0,
+            isPaused: patch.isPaused ?? base?.isPaused ?? true,
+            // Optimistic client updates should not outrank server state.
+            updatedAt:
+              patch.updatedAt ?? base?.updatedAt ?? OPTIMISTIC_UPDATED_AT,
+            controlledByUserId:
+              patch.controlledByUserId ?? base?.controlledByUserId ?? null,
+          },
+          patch.updatedAt ? "authoritative" : "local"
+        );
       });
     },
     [realtimePlayback, roomId]
@@ -126,10 +158,10 @@ export function useRoomAudio({
         positionSec: currentPositionSec,
         isPaused: false,
       })
-        .then(setPlayback)
+        .then(syncAuthoritativePlayback)
         .catch(() => undefined);
     },
-    [activePlayback, isHost, roomId]
+    [activePlayback, isHost, roomId, syncAuthoritativePlayback]
   );
 
   const seekTo = useCallback(
@@ -153,7 +185,7 @@ export function useRoomAudio({
         positionSec: Math.floor(nextPositionSec),
       }).then((nextPlayback) => {
         lastProgressSyncRef.current = nextPlayback.positionSec;
-        setPlayback(nextPlayback);
+        syncAuthoritativePlayback(nextPlayback);
       });
     },
     [
@@ -162,6 +194,7 @@ export function useRoomAudio({
       durationSec,
       isHost,
       roomId,
+      syncAuthoritativePlayback,
       syncDisplayedTimeSec,
     ]
   );
@@ -228,24 +261,27 @@ export function useRoomAudio({
   useEffect(() => {
     setPlayback((current) => {
       if (!realtimePlayback) return current;
-      if (!current) return realtimePlayback;
+      const nextPlayback = toPlaybackSnapshot(realtimePlayback);
+      if (!current) return nextPlayback;
 
-      const currentUpdatedAt = Date.parse(current.updatedAt);
+      const currentUpdatedAt = Date.parse(current.state.updatedAt);
       const nextUpdatedAt = Date.parse(realtimePlayback.updatedAt);
 
       if (
         !Number.isFinite(currentUpdatedAt) ||
         !Number.isFinite(nextUpdatedAt)
       ) {
-        return realtimePlayback;
+        return nextPlayback;
       }
 
-      return nextUpdatedAt >= currentUpdatedAt ? realtimePlayback : current;
+      if (nextUpdatedAt > currentUpdatedAt) return nextPlayback;
+      if (nextUpdatedAt < currentUpdatedAt) return current;
+      return current.source === "local" ? nextPlayback : current;
     });
   }, [realtimePlayback]);
 
   useEffect(() => {
-    setPlayback(realtimePlayback ?? null);
+    setPlayback(realtimePlayback ? toPlaybackSnapshot(realtimePlayback) : null);
     lastProgressSyncRef.current = 0;
     displayedTimeRef.current = 0;
   }, [roomId]);
@@ -253,6 +289,16 @@ export function useRoomAudio({
   useEffect(() => {
     setDurationSec(activeQueueItem?.durationSec ?? 0);
   }, [activeQueueItem?.durationSec, activeQueueItem?.id]);
+
+  useEffect(() => {
+    const nextPositionSec = activePlayback?.positionSec ?? 0;
+    syncDisplayedTimeSec(nextPositionSec);
+    lastProgressSyncRef.current = nextPositionSec;
+  }, [
+    activePlayback?.providerTrackId,
+    activePlayback?.queueItemId,
+    syncDisplayedTimeSec,
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -293,7 +339,7 @@ export function useRoomAudio({
         positionSec: Math.floor(audio.currentTime),
       }).then((nextPlayback) => {
         lastProgressSyncRef.current = nextPlayback.positionSec;
-        setPlayback(nextPlayback);
+        syncAuthoritativePlayback(nextPlayback);
       });
     };
 
@@ -311,7 +357,7 @@ export function useRoomAudio({
         positionSec: Math.floor(audio.currentTime),
       }).then((nextPlayback) => {
         lastProgressSyncRef.current = nextPlayback.positionSec;
-        setPlayback(nextPlayback);
+        syncAuthoritativePlayback(nextPlayback);
       });
     };
 
@@ -347,7 +393,7 @@ export function useRoomAudio({
         isPaused: next ? false : true,
       }).then((nextPlayback) => {
         lastProgressSyncRef.current = nextPlayback.positionSec;
-        setPlayback(nextPlayback);
+        syncAuthoritativePlayback(nextPlayback);
       });
     };
 
@@ -374,6 +420,7 @@ export function useRoomAudio({
     isHost,
     queue,
     roomId,
+    syncAuthoritativePlayback,
     syncDisplayedTimeSec,
   ]);
 
@@ -403,7 +450,10 @@ export function useRoomAudio({
       setIsMuted(audio.muted);
     }
 
-    const remoteTime = getAuthoritativePositionSec(activePlayback);
+    const remoteTime = getAuthoritativePositionSec(
+      activePlayback,
+      activePlaybackSyncedAtMs
+    );
     if (Math.abs(audio.currentTime - remoteTime) > DRIFT_THRESHOLD_SEC) {
       applyingRemoteRef.current = true;
       audio.currentTime = remoteTime;
@@ -426,7 +476,7 @@ export function useRoomAudio({
           applyingRemoteRef.current = false;
         });
     }
-  }, [activePlayback, syncDisplayedTimeSec]);
+  }, [activePlayback, activePlaybackSyncedAtMs, syncDisplayedTimeSec]);
 
   useEffect(() => {
     if (!isHost) return;
