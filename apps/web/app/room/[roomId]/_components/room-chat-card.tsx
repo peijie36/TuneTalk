@@ -181,36 +181,40 @@ const ChatMessageList = memo(function ChatMessageList({
       ) : null}
 
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={chatScrollRef}
-          className="border-border/70 tt-scrollbar-hidden h-full min-h-0 overflow-y-auto rounded-2xl border bg-white/80 p-3 shadow-inner"
-          onScroll={handleChatScroll}
-        >
-          {statusNotice ? (
-            <div className="text-muted-foreground text-sm">{statusNotice}</div>
-          ) : null}
+        <div className="border-border/70 h-full min-h-0 overflow-hidden rounded-2xl border bg-white/80 shadow-inner">
+          <div
+            ref={chatScrollRef}
+            className="tt-scrollbar mr-1 h-full min-h-0 overflow-y-auto p-3"
+            onScroll={handleChatScroll}
+          >
+            {statusNotice ? (
+              <div className="text-muted-foreground text-sm">
+                {statusNotice}
+              </div>
+            ) : null}
 
-          {messages.length === 0 ? (
-            <div className="text-muted-foreground text-sm">
-              {emptyStateText}
-            </div>
-          ) : (
-            <div
-              className="relative w-full"
-              style={{ height: chatVirtualizer.getTotalSize() }}
-            >
-              {chatVirtualizer.getVirtualItems().map((item) => (
-                <ChatMessageRow
-                  key={item.key}
-                  index={item.index}
-                  start={item.start}
-                  measureElement={chatVirtualizer.measureElement}
-                  message={messages[item.index]}
-                  sessionUserId={sessionUserId}
-                />
-              ))}
-            </div>
-          )}
+            {messages.length === 0 ? (
+              <div className="text-muted-foreground text-sm">
+                {emptyStateText}
+              </div>
+            ) : (
+              <div
+                className="relative w-full"
+                style={{ height: chatVirtualizer.getTotalSize() }}
+              >
+                {chatVirtualizer.getVirtualItems().map((item) => (
+                  <ChatMessageRow
+                    key={item.key}
+                    index={item.index}
+                    start={item.start}
+                    measureElement={chatVirtualizer.measureElement}
+                    message={messages[item.index]}
+                    sessionUserId={sessionUserId}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {unreadCount > 0 ? (

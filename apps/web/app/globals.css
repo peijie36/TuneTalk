@@ -388,6 +388,41 @@
     display: none;
   }
 
+  .tt-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in srgb,
+        var(--color-text-strong) 20%,
+        transparent
+      )
+      transparent;
+  }
+
+  .tt-scrollbar::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .tt-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .tt-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(
+      in srgb,
+      var(--color-text-strong) 20%,
+      transparent
+    );
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  .tt-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-text-strong) 30%, transparent);
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
   @media (max-width: 640px) {
     .tt-container {
       width: min(1040px, 100% - 24px);
