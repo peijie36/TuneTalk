@@ -65,45 +65,53 @@ export async function addRoomQueueItem(input: {
   artworkUrl?: string | null;
   durationSec?: number | null;
 }): Promise<RoomQueueItem> {
-  const nextPosRow = await db
-    .select({
-      maxPosition: sql<number>`coalesce(max(${schema.roomQueueItem.position}), -1)`,
-    })
-    .from(schema.roomQueueItem)
-    .where(eq(schema.roomQueueItem.roomId, input.roomId))
-    .limit(1);
+  const inserted = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${input.roomId}))`
+    );
 
-  const position = Number(nextPosRow.at(0)?.maxPosition ?? -1) + 1;
+    const nextPosRow = await tx
+      .select({
+        maxPosition: sql<number>`coalesce(max(${schema.roomQueueItem.position}), -1)`,
+      })
+      .from(schema.roomQueueItem)
+      .where(eq(schema.roomQueueItem.roomId, input.roomId))
+      .limit(1);
 
-  const inserted = await db
-    .insert(schema.roomQueueItem)
-    .values({
-      id: `queue_${crypto.randomUUID()}`,
-      roomId: input.roomId,
-      provider: input.provider,
-      providerTrackId: input.providerTrackId,
-      title: input.title ?? null,
-      artistName: input.artistName ?? null,
-      artworkUrl: input.artworkUrl ?? null,
-      durationSec: input.durationSec ?? null,
-      position,
-      addedByUserId: input.userId,
-    })
-    .returning({
-      id: schema.roomQueueItem.id,
-      roomId: schema.roomQueueItem.roomId,
-      provider: schema.roomQueueItem.provider,
-      providerTrackId: schema.roomQueueItem.providerTrackId,
-      title: schema.roomQueueItem.title,
-      artistName: schema.roomQueueItem.artistName,
-      artworkUrl: schema.roomQueueItem.artworkUrl,
-      durationSec: schema.roomQueueItem.durationSec,
-      position: schema.roomQueueItem.position,
-      addedByUserId: schema.roomQueueItem.addedByUserId,
-      createdAt: schema.roomQueueItem.createdAt,
-    });
+    const position = Number(nextPosRow.at(0)?.maxPosition ?? -1) + 1;
 
-  return formatQueueItem(inserted[0]);
+    const insertedRows = await tx
+      .insert(schema.roomQueueItem)
+      .values({
+        id: `queue_${crypto.randomUUID()}`,
+        roomId: input.roomId,
+        provider: input.provider,
+        providerTrackId: input.providerTrackId,
+        title: input.title ?? null,
+        artistName: input.artistName ?? null,
+        artworkUrl: input.artworkUrl ?? null,
+        durationSec: input.durationSec ?? null,
+        position,
+        addedByUserId: input.userId,
+      })
+      .returning({
+        id: schema.roomQueueItem.id,
+        roomId: schema.roomQueueItem.roomId,
+        provider: schema.roomQueueItem.provider,
+        providerTrackId: schema.roomQueueItem.providerTrackId,
+        title: schema.roomQueueItem.title,
+        artistName: schema.roomQueueItem.artistName,
+        artworkUrl: schema.roomQueueItem.artworkUrl,
+        durationSec: schema.roomQueueItem.durationSec,
+        position: schema.roomQueueItem.position,
+        addedByUserId: schema.roomQueueItem.addedByUserId,
+        createdAt: schema.roomQueueItem.createdAt,
+      });
+
+    return insertedRows[0];
+  });
+
+  return formatQueueItem(inserted);
 }
 
 export { formatQueueItem };

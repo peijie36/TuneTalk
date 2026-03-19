@@ -107,24 +107,28 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
       return c.json({ error: "Audius API key is not configured." }, 500);
     }
 
-    const { response, payload } = await audiusGet("/tracks/search", {
-      query,
-      limit: "15",
-    });
+    try {
+      const { response, payload } = await audiusGet("/tracks/search", {
+        query,
+        limit: "15",
+      });
 
-    if (!response.ok) {
-      return c.json({ error: "Failed to search Audius tracks." }, 502);
+      if (!response.ok) {
+        return c.json({ error: "Failed to search Audius tracks." }, 502);
+      }
+
+      const data = Array.isArray((payload as { data?: unknown })?.data)
+        ? (payload as { data: unknown[] }).data
+        : [];
+
+      return c.json({
+        tracks: data
+          .map(coerceTrack)
+          .filter((track): track is AudiusTrackDto => Boolean(track)),
+      });
+    } catch {
+      return c.json({ error: "Audius search is unavailable right now." }, 502);
     }
-
-    const data = Array.isArray((payload as { data?: unknown })?.data)
-      ? (payload as { data: unknown[] }).data
-      : [];
-
-    return c.json({
-      tracks: data
-        .map(coerceTrack)
-        .filter((track): track is AudiusTrackDto => Boolean(track)),
-    });
   })
   .get("/tracks/:trackId", async (c) => {
     const trackId = c.req.param("trackId");
@@ -136,20 +140,24 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
       return c.json({ error: "Audius API key is not configured." }, 500);
     }
 
-    const { response, payload } = await audiusGet(
-      `/tracks/${encodeURIComponent(trackId)}`
-    );
+    try {
+      const { response, payload } = await audiusGet(
+        `/tracks/${encodeURIComponent(trackId)}`
+      );
 
-    if (response.status === 404) {
-      return c.json({ track: null }, 404);
-    }
+      if (response.status === 404) {
+        return c.json({ track: null }, 404);
+      }
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return c.json({ error: "Failed to load Audius track." }, 502);
+      }
+
+      const track = coerceTrack((payload as { data?: unknown })?.data);
+      return c.json({ track });
+    } catch {
       return c.json({ error: "Failed to load Audius track." }, 502);
     }
-
-    const track = coerceTrack((payload as { data?: unknown })?.data);
-    return c.json({ track });
   })
   .get("/tracks/:trackId/stream", async (c) => {
     const trackId = c.req.param("trackId");
@@ -169,33 +177,41 @@ export const audiusRoute = new Hono<HonoAuthVariables>()
       forwardHeaders.set("range", range);
     }
 
-    const response = await audiusStream(
-      `/tracks/${encodeURIComponent(trackId)}/stream`,
-      forwardHeaders
-    );
+    try {
+      const response = await audiusStream(
+        `/tracks/${encodeURIComponent(trackId)}/stream`,
+        forwardHeaders
+      );
 
-    if (!response.ok && response.status !== 206) {
+      if (!response.ok && response.status !== 206) {
+        return c.json({ error: "Failed to stream Audius track." }, 502);
+      }
+
+      if (!response.body) {
+        return c.json({ error: "Failed to stream Audius track." }, 502);
+      }
+
+      const headers = new Headers();
+      for (const name of [
+        "accept-ranges",
+        "cache-control",
+        "content-length",
+        "content-range",
+        "content-type",
+        "etag",
+        "last-modified",
+      ]) {
+        const value = response.headers.get(name);
+        if (value) {
+          headers.set(name, value);
+        }
+      }
+
+      return new Response(response.body, {
+        status: response.status,
+        headers,
+      });
+    } catch {
       return c.json({ error: "Failed to stream Audius track." }, 502);
     }
-
-    const headers = new Headers();
-    for (const name of [
-      "accept-ranges",
-      "cache-control",
-      "content-length",
-      "content-range",
-      "content-type",
-      "etag",
-      "last-modified",
-    ]) {
-      const value = response.headers.get(name);
-      if (value) {
-        headers.set(name, value);
-      }
-    }
-
-    return new Response(response.body, {
-      status: response.status,
-      headers,
-    });
   });
