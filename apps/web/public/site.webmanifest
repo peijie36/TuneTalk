@@ -1,0 +1,27 @@
+{
+  "name": "TuneTalk",
+  "short_name": "TuneTalk",
+  "description": "Create and join shared listening rooms with synced playback and live chat.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f4fb",
+  "theme_color": "#a03df0",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
