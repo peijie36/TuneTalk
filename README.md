@@ -1,5 +1,7 @@
 <!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+
 <a name="readme-top"></a>
+
 <!--
 *** Thanks for checking out the Best-README-Template. If you have a suggestion
 *** that would make this better, please fork the repo and create a pull request
@@ -16,6 +18,7 @@
 *** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
 *** https://www.markdownguide.org/basic-syntax/#reference-style-links
 -->
+
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -61,6 +64,7 @@
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
+        <li><a href="#docker">Docker</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -73,14 +77,16 @@
 </details>
 
 <!-- ABOUT THE PROJECT -->
+
 ## About The Project
 
 TuneTalk is a Turborepo monorepo for a collaborative listening experience. The web app lets users discover rooms, create public or private sessions, join friends, queue tracks, and chat in realtime. The API handles authentication, room lifecycle, playback updates, queue mutations, and WebSocket fan-out, while Postgres persists users, memberships, messages, and playback state.
 
 Here's why:
-* Create public or password-protected rooms with clear host and member roles.
-* Keep queue, playback, chat, and presence synchronized through a dedicated Hono WebSocket channel.
-* Share TypeScript contracts and database code across apps so the stack stays consistent.
+
+- Create public or password-protected rooms with clear host and member roles.
+- Keep queue, playback, chat, and presence synchronized through a dedicated Hono WebSocket channel.
+- Share TypeScript contracts and database code across apps so the stack stays consistent.
 
 The current implementation uses Better Auth for sign-in, Drizzle ORM for schema access, PostgreSQL for persistence, and Audius as the music provider.
 
@@ -88,30 +94,33 @@ The current implementation uses Better Auth for sign-in, Drizzle ORM for schema 
 
 ### Built With
 
-* [Next.js](https://nextjs.org/)
-* [React](https://react.dev/)
-* [Tailwind CSS](https://tailwindcss.com/)
-* [Hono](https://hono.dev/)
-* [Better Auth](https://www.better-auth.com/)
-* [Drizzle ORM](https://orm.drizzle.team/)
-* [PostgreSQL](https://www.postgresql.org/)
-* [Turborepo](https://turbo.build/repo)
+- [Next.js](https://nextjs.org/)
+- [React](https://react.dev/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Hono](https://hono.dev/)
+- [Better Auth](https://www.better-auth.com/)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [Turborepo](https://turbo.build/repo)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- GETTING STARTED -->
+
 ## Getting Started
 
 To run TuneTalk locally, you need a PostgreSQL database plus the environment variables consumed by the web app, API, and database package.
 
 ### Prerequisites
 
-* Node.js `20.11+`
-* `pnpm` `10.21+`
-* PostgreSQL
-* An Audius API key if you want track search and streaming enabled locally
+- Node.js `20.11+`
+- `pnpm` `10.21+`
+- PostgreSQL
+- Docker Desktop or Docker Engine, if you want to run the app with Docker Compose
+- An Audius API key if you want track search and streaming enabled locally
 
 Example `pnpm` install:
+
 ```sh
 npm install -g pnpm
 ```
@@ -151,7 +160,47 @@ npm install -g pnpm
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+### Docker
+
+TuneTalk includes separate Dockerfiles for the API and web app, plus a Compose file that builds and runs both services together.
+
+Before starting the containers, create a local `.env` file with the same variables listed above. Compose passes that file into both services. The Compose setup does not start PostgreSQL, so `DATABASE_URL` must point to a database the containers can reach. If your database is running on the host machine through Docker Desktop, use `host.docker.internal` instead of `localhost` in the connection string.
+
+Build and start the local containers:
+
+```sh
+docker compose up --build
+```
+
+The web app will be available at `http://localhost:3000`, and the API will listen on `http://localhost:8787`.
+
+For registry or cloud deployment, build the service image you need with the matching Dockerfile:
+
+```sh
+docker build -f Dockerfile.api -t myregistry.com/tunetalk-api .
+docker build -f Dockerfile.web -t myregistry.com/tunetalk-web .
+```
+
+If your deployment target uses a different CPU architecture than your development machine, pass the target platform during the build:
+
+```sh
+docker build --platform=linux/amd64 -f Dockerfile.api -t myregistry.com/tunetalk-api .
+docker build --platform=linux/amd64 -f Dockerfile.web -t myregistry.com/tunetalk-web .
+```
+
+Then push the images to your registry:
+
+```sh
+docker push myregistry.com/tunetalk-api
+docker push myregistry.com/tunetalk-web
+```
+
+For more Docker background, see Docker's [Node.js guide](https://docs.docker.com/language/nodejs/) and [image sharing guide](https://docs.docker.com/go/get-started-sharing/).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 <!-- USAGE EXAMPLES -->
+
 ## Usage
 
 TuneTalk is organized around hosted listening rooms. A typical local flow looks like this:
@@ -164,38 +213,40 @@ TuneTalk is organized around hosted listening rooms. A typical local flow looks 
 
 Helpful workspace scripts:
 
-* `pnpm dev` - alias for the web app
-* `pnpm dev:web` - run `apps/web`
-* `pnpm dev:api` - run `apps/api`
-* `pnpm build` - run the Turborepo build pipeline
-* `pnpm lint` - lint all workspace packages
-* `pnpm format` - format supported files with Prettier
-* `pnpm drizzle-studio` - open Drizzle Studio for the database package
+- `pnpm dev` - alias for the web app
+- `pnpm dev:web` - run `apps/web`
+- `pnpm dev:api` - run `apps/api`
+- `pnpm build` - run the Turborepo build pipeline
+- `pnpm lint` - lint all workspace packages
+- `pnpm format` - format supported files with Prettier
+- `pnpm drizzle-studio` - open Drizzle Studio for the database package
 
 Useful API endpoints during local development:
 
-* `GET /health` - liveness check
-* `GET /ready` - database readiness check
-* `GET /api/me` - current authenticated session
-* `GET|POST /api/auth/*` - Better Auth handlers
+- `GET /health` - liveness check
+- `GET /ready` - database readiness check
+- `GET /api/me` - current authenticated session
+- `GET|POST /api/auth/*` - Better Auth handlers
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ROADMAP -->
+
 ## Roadmap
 
-* [x] Public and private room discovery and join flows
-* [x] Realtime queue management, playback sync, chat, and presence
-* [x] Better Auth and PostgreSQL-backed persistence
-* [ ] Additional music providers beyond Audius
-* [ ] Production deployment and observability hardening
-* [ ] Richer moderation and collaboration tools for rooms
+- [x] Public and private room discovery and join flows
+- [x] Realtime queue management, playback sync, chat, and presence
+- [x] Better Auth and PostgreSQL-backed persistence
+- [ ] Additional music providers beyond Audius
+- [ ] Production deployment and observability hardening
+- [ ] Richer moderation and collaboration tools for rooms
 
 See the [open issues](https://github.com/peijie36/TuneTalk/issues) for a full list of proposed features and known bugs.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
+
 ## Contributing
 
 Contributions are what make the open source community such a useful place to learn, build, and share. Any contributions you make are appreciated.
@@ -211,6 +262,7 @@ If you have a suggestion that would improve TuneTalk, fork the repo and create a
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- LICENSE -->
+
 ## License
 
 This repository does not currently include a published license file. Add a project license before redistributing the code outside GitHub's default terms.
@@ -218,6 +270,7 @@ This repository does not currently include a published license file. Add a proje
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- CONTACT -->
+
 ## Contact
 
 Peijie Zheng
@@ -229,18 +282,20 @@ Project Link: [https://github.com/peijie36/TuneTalk](https://github.com/peijie36
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ACKNOWLEDGMENTS -->
+
 ## Acknowledgments
 
-* [Best README Template](https://github.com/othneildrew/Best-README-Template)
-* [Audius API](https://docs.audius.org/)
-* [Better Auth](https://www.better-auth.com/)
-* [Hono](https://hono.dev/)
-* [Drizzle ORM](https://orm.drizzle.team/)
-* [shadcn/ui](https://ui.shadcn.com/)
+- [Best README Template](https://github.com/othneildrew/Best-README-Template)
+- [Audius API](https://docs.audius.org/)
+- [Better Auth](https://www.better-auth.com/)
+- [Hono](https://hono.dev/)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [shadcn/ui](https://ui.shadcn.com/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
+
 [contributors-shield]: https://img.shields.io/github/contributors/peijie36/TuneTalk.svg?style=for-the-badge
 [contributors-url]: https://github.com/peijie36/TuneTalk/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/peijie36/TuneTalk.svg?style=for-the-badge
