@@ -7,7 +7,49 @@ services:
       - "8787:8787"
     env_file:
       - .env
-  
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api
+          target: /app/apps/api
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+        - action: sync
+          path: ./packages/db
+          target: /app/packages/db
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+        - action: sync
+          path: ./packages/shared
+          target: /app/packages/shared
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
+        - action: rebuild
+          path: ./turbo.json
+        - action: rebuild
+          path: ./tsconfig.base.json
+        - action: rebuild
+          path: ./apps/api/package.json
+        - action: rebuild
+          path: ./packages/db/package.json
+        - action: rebuild
+          path: ./packages/shared/package.json
+
   web:
     build:
       context: .
@@ -20,3 +62,47 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8787
     depends_on:
       - api
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web
+          target: /app/apps/web
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - .next/
+            - .turbo/
+            - dist/
+            - coverage/
+        - action: sync
+          path: ./packages/db
+          target: /app/packages/db
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+        - action: sync
+          path: ./packages/shared
+          target: /app/packages/shared
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - dist/
+            - coverage/
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
+        - action: rebuild
+          path: ./turbo.json
+        - action: rebuild
+          path: ./tsconfig.base.json
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./packages/db/package.json
+        - action: rebuild
+          path: ./packages/shared/package.json
