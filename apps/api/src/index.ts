@@ -1,8 +1,5 @@
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
-import { db } from "@tunetalk/db";
-import * as schema from "@tunetalk/db/schema";
-import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -10,13 +7,9 @@ import { logger } from "hono/logger";
 import { auth } from "@/src/lib/auth";
 import { env } from "@/src/lib/env";
 import type { HonoAuthVariables } from "@/src/lib/hono-types";
-import { listRoomQueueItems } from "@/src/lib/room-queue";
-import {
-  addRoomConnection,
-  handleRoomMessage,
-  removeRoomConnection,
-} from "@/src/lib/room-realtime";
+import { checkDatabaseReady } from "@/src/repositories/health";
 import { audiusRoute } from "@/src/routes/audius";
+import { registerRoomWebSocketRoute } from "@/src/routes/room-ws";
 import { roomsRoute } from "@/src/routes/rooms";
 
 const app = new Hono<HonoAuthVariables>();
@@ -57,7 +50,7 @@ app.get("/", (c) => c.text("Hello, world!"));
 app.get("/health", (c) => c.json({ status: "ok" }));
 app.get("/ready", async (c) => {
   try {
-    await db.execute(sql`select 1`);
+    await checkDatabaseReady();
     return c.json({ status: "ready" });
   } catch {
     return c.json({ status: "not_ready" }, 503);
@@ -75,108 +68,7 @@ app.get("/api/me", (c) => {
   return c.json({ user, session });
 });
 
-app.get(
-  "/api/rooms/:roomId/ws",
-  nodeWebSocket.upgradeWebSocket((c) => {
-    const roomId = c.req.param("roomId");
-    const user = c.get("user") as HonoAuthVariables["Variables"]["user"];
-
-    return {
-      onOpen: (_event, ws) => {
-        if (!user) {
-          ws.close(1008, "Unauthorized");
-          return;
-        }
-
-        void (async () => {
-          const roomRow = await db
-            .select({
-              isPublic: schema.room.isPublic,
-              createdByUserId: schema.room.createdByUserId,
-            })
-            .from(schema.room)
-            .where(eq(schema.room.id, roomId))
-            .limit(1);
-
-          const room = roomRow.at(0);
-          if (!room) {
-            ws.close(1008, "Room not found");
-            return;
-          }
-
-          const membership = await db
-            .select({ roomId: schema.roomMember.roomId })
-            .from(schema.roomMember)
-            .where(
-              and(
-                eq(schema.roomMember.roomId, roomId),
-                eq(schema.roomMember.userId, user.id)
-              )
-            )
-            .limit(1);
-
-          if (membership.length === 0) {
-            ws.close(
-              1008,
-              room.isPublic ? "Join room before connecting" : "Forbidden"
-            );
-            return;
-          }
-
-          const name =
-            user.name?.trim() || user.email?.trim() || `user_${user.id}`;
-          addRoomConnection(roomId, ws, {
-            id: user.id,
-            name,
-            role: room.createdByUserId === user.id ? "host" : "member",
-          });
-
-          const queue = await listRoomQueueItems(roomId);
-          ws.send(
-            JSON.stringify({
-              type: "queue_state",
-              roomId,
-              queue,
-            })
-          );
-
-          const playback = await db.query.roomPlaybackState.findFirst({
-            where: (table, { eq }) => eq(table.roomId, roomId),
-          });
-
-          if (playback) {
-            ws.send(
-              JSON.stringify({
-                type: "playback_state",
-                roomId,
-                playback: {
-                  roomId: playback.roomId,
-                  queueItemId: playback.queueItemId,
-                  provider: playback.provider,
-                  providerTrackId: playback.providerTrackId,
-                  positionSec: playback.positionSec,
-                  isPaused: playback.isPaused,
-                  updatedAt: playback.updatedAt.toISOString(),
-                  controlledByUserId: playback.controlledByUserId,
-                },
-              })
-            );
-          }
-        })();
-      },
-      onMessage: (event, ws) => {
-        handleRoomMessage(roomId, ws, event.data);
-      },
-      onClose: (_event, ws) => {
-        removeRoomConnection(roomId, ws);
-      },
-      onError: (_event, ws) => {
-        removeRoomConnection(roomId, ws);
-      },
-    };
-  })
-);
-
+registerRoomWebSocketRoute(app, nodeWebSocket);
 app.route("/api/rooms", roomsRoute);
 app.route("/api/audius", audiusRoute);
 

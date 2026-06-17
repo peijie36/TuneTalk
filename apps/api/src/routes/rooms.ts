@@ -1,43 +1,39 @@
-import { db } from "@tunetalk/db";
-import * as schema from "@tunetalk/db/schema";
-import { and, desc, eq, lt, or } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { HonoAuthVariables } from "@/src/lib/hono-types";
-import { addRoomQueueItem, listRoomQueueItems } from "@/src/lib/room-queue";
 import {
   broadcastPlaybackState,
   broadcastQueueItemAdded,
   broadcastQueueItemsRemoved,
   broadcastRoomDisbanded,
 } from "@/src/lib/room-realtime";
-import {
-  encodeDatedCursor,
-  parseDatedCursor,
-} from "@/src/routes/helpers/dated-cursor";
-import {
-  coerceLimit,
-  createEmptyPlaybackState,
-  formatPlaybackState,
-  formatRoomSummary,
-  parseRoomVisibility,
-} from "@/src/routes/helpers/rooms";
+import { parseDatedCursor } from "@/src/routes/helpers/dated-cursor";
+import { coerceLimit, parseRoomVisibility } from "@/src/routes/helpers/rooms";
 import {
   addQueueItemSchema,
   createRoomSchema,
   joinRoomSchema,
   updatePlaybackSchema,
 } from "@/src/routes/schemas/rooms.schema";
+import {
+  formatPlaybackState,
+  formatRoomSummary,
+} from "@/src/serializers/rooms";
 import { getRoomAccessContext } from "@/src/services/rooms/access";
 import {
   createRoomForUser,
   joinRoomForUser,
   leaveRoomForUser,
 } from "@/src/services/rooms/lifecycle";
+import { listRoomMessages } from "@/src/services/rooms/messages";
 import {
-  getRoomPlaybackRecord,
+  getRoomPlaybackState,
   saveRoomPlaybackUpdate,
 } from "@/src/services/rooms/playback";
+import {
+  addRoomQueueItem,
+  listRoomQueueItems,
+} from "@/src/services/rooms/queue";
 import {
   getRoomSummaryRecord,
   listRoomSummaries,
@@ -57,8 +53,9 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
       return c.json({ error: "Invalid cursor." }, 400);
     }
 
+    const limit = coerceLimit(c.req.query("limit"));
     const result = await listRoomSummaries({
-      limit: coerceLimit(c.req.query("limit")),
+      limit,
       q: (c.req.query("q") ?? "").trim(),
       visibility,
       cursor,
@@ -66,7 +63,7 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
 
     return c.json({
       rooms: result.rooms,
-      limit: coerceLimit(c.req.query("limit")),
+      limit,
       nextCursor: result.nextCursor,
     });
   })
@@ -86,69 +83,26 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
     const user = c.get("user");
     const roomId = c.req.param("roomId");
 
-    const limitRaw = c.req.query("limit");
-    const limitParsed = Number(limitRaw);
-    const limit = Number.isFinite(limitParsed)
-      ? Math.min(100, Math.max(1, Math.trunc(limitParsed)))
-      : 50;
-
+    const limit = coerceLimit(c.req.query("limit"));
     const cursorRaw = c.req.query("cursor");
     const cursor = parseDatedCursor(cursorRaw);
     if ((cursorRaw ?? "").trim() && !cursor) {
       return c.json({ error: "Invalid cursor." }, 400);
     }
 
-    const access = await getRoomAccessContext(roomId, user?.id ?? null);
-    if (!access.ok) return c.json({ error: access.error }, access.status);
+    const result = await listRoomMessages({
+      roomId,
+      userId: user?.id ?? null,
+      limit,
+      cursor,
+    });
 
-    const rows = await db
-      .select({
-        id: schema.roomMessage.id,
-        text: schema.roomMessage.text,
-        createdAt: schema.roomMessage.createdAt,
-        userId: schema.roomMessage.userId,
-        userName: schema.user.name,
-      })
-      .from(schema.roomMessage)
-      .leftJoin(schema.user, eq(schema.user.id, schema.roomMessage.userId))
-      .where(
-        cursor
-          ? and(
-              eq(schema.roomMessage.roomId, roomId),
-              or(
-                lt(schema.roomMessage.createdAt, cursor.createdAt),
-                and(
-                  eq(schema.roomMessage.createdAt, cursor.createdAt),
-                  lt(schema.roomMessage.id, cursor.id)
-                )
-              )
-            )
-          : eq(schema.roomMessage.roomId, roomId)
-      )
-      .orderBy(desc(schema.roomMessage.createdAt), desc(schema.roomMessage.id))
-      .limit(limit);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
 
-    const messages = rows
-      .map((row) => ({
-        id: row.id,
-        sender: {
-          id: row.userId,
-          name: row.userName ?? "Unknown",
-        },
-        text: row.text,
-        createdAt: row.createdAt.toISOString(),
-      }))
-      .reverse();
-
-    const nextCursor =
-      rows.length === limit
-        ? encodeDatedCursor({
-            id: rows.at(-1)!.id,
-            createdAt: rows.at(-1)!.createdAt,
-          })
-        : null;
-
-    return c.json({ messages, nextCursor });
+    return c.json({
+      messages: result.messages,
+      nextCursor: result.nextCursor,
+    });
   })
   .post("/", async (c) => {
     const user = c.get("user");
@@ -267,12 +221,8 @@ export const roomsRoute = new Hono<HonoAuthVariables>()
     const access = await getRoomAccessContext(roomId, user?.id ?? null);
     if (!access.ok) return c.json({ error: access.error }, access.status);
 
-    const playback = await getRoomPlaybackRecord(roomId);
-    return c.json({
-      playback: playback
-        ? formatPlaybackState(playback)
-        : createEmptyPlaybackState(roomId),
-    });
+    const playback = await getRoomPlaybackState(roomId);
+    return c.json({ playback });
   })
   .post("/:roomId/playback", async (c) => {
     const user = c.get("user");
