@@ -1,6 +1,5 @@
-import { db } from "@tunetalk/db";
-import * as schema from "@tunetalk/db/schema";
-import { and, eq } from "drizzle-orm";
+import { findRoomMembershipRole } from "@/src/repositories/memberships";
+import { findRoomAccessById } from "@/src/repositories/rooms";
 
 export type RoomAccessContext =
   | {
@@ -23,17 +22,7 @@ export async function getRoomAccessContext(
   roomId: string,
   userId: string | null
 ): Promise<RoomAccessContext> {
-  const roomRow = await db
-    .select({
-      id: schema.room.id,
-      isPublic: schema.room.isPublic,
-      createdByUserId: schema.room.createdByUserId,
-    })
-    .from(schema.room)
-    .where(eq(schema.room.id, roomId))
-    .limit(1);
-
-  const room = roomRow.at(0);
+  const room = await findRoomAccessById(roomId);
   if (!room) {
     return {
       ok: false,
@@ -59,23 +48,14 @@ export async function getRoomAccessContext(
     };
   }
 
-  const member = await db
-    .select({ role: schema.roomMember.role })
-    .from(schema.roomMember)
-    .where(
-      and(
-        eq(schema.roomMember.roomId, roomId),
-        eq(schema.roomMember.userId, userId)
-      )
-    )
-    .limit(1);
+  const membershipRole = await findRoomMembershipRole({ roomId, userId });
 
-  if (!room.isPublic && member.length === 0) {
+  if (!room.isPublic && !membershipRole) {
     return { ok: false, status: 403, error: "Forbidden" };
   }
 
   const role =
-    room.createdByUserId === userId ? "host" : (member.at(0)?.role ?? null);
+    room.createdByUserId === userId ? "host" : (membershipRole ?? null);
 
   return {
     ok: true,

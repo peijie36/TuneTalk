@@ -1,7 +1,5 @@
 import type { WSContext } from "hono/ws";
 
-import { db } from "@tunetalk/db";
-import * as schema from "@tunetalk/db/schema";
 import type {
   RoomPlaybackBroadcast,
   RoomQueueBroadcast,
@@ -10,6 +8,8 @@ import type {
   RoomRealtimeEvent,
 } from "@tunetalk/shared/room-realtime";
 import type { RoomMemberRole } from "@tunetalk/shared/rooms";
+
+import { createRoomChatEvent } from "@/src/services/rooms/messages";
 
 const WS_OPEN_STATE = 1;
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -267,31 +267,12 @@ export function handleRoomMessage(
 
   void (async () => {
     try {
-      const inserted = await db
-        .insert(schema.roomMessage)
-        .values({
-          id: `msg_${crypto.randomUUID()}`,
-          roomId,
-          userId: state.user.id,
-          text,
-        })
-        .returning({
-          id: schema.roomMessage.id,
-          createdAt: schema.roomMessage.createdAt,
-        });
-
-      const row = inserted.at(0);
-      const messageId = row?.id ?? `msg_${crypto.randomUUID()}`;
-      const createdAt = (row?.createdAt ?? new Date()).toISOString();
-
-      const event: RoomRealtimeEvent = {
-        type: "chat",
+      const event = await createRoomChatEvent({
         roomId,
-        id: messageId,
-        sender: { id: state.user.id, name: state.user.name },
+        user: state.user,
         text,
-        createdAt,
-      };
+      });
+      if (!event) return;
 
       for (const socket of connections.keys()) {
         safeSend(socket, event);
